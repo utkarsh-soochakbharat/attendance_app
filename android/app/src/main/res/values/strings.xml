@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VisitorApp</string>
+    <string name="title_activity_main">VisitorApp</string>
+    <string name="package_name">com.soochakbharat.visitorapp</string>
+    <string name="custom_url_scheme">com.soochakbharat.visitorapp</string>
+</resources>
