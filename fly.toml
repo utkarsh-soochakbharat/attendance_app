@@ -1,31 +1,30 @@
-# fly.toml app configuration file generated for attendance-app-v5jdla
+# fly.toml app configuration file generated for attendance-app-v5jdla on 2026-01-20T13:11:28+05:30
+#
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "attendance-app-v5jdla"
-primary_region = "bom"
+app = 'attendance-app-v5jdla'
+primary_region = 'bom'
 
 [build]
 
 [env]
-  DATABASE_PATH = "/app/data/ovms.db"
-  NODE_ENV = "production"
+  DATABASE_PATH = '/app/data/ovms.db'
+  NODE_ENV = 'production'
+
+[[mounts]]
+  source = 'visitor_db'
+  destination = '/app/data'
 
 [http_service]
-  internal_port = 3000
+  internal_port = 80
   force_https = true
-  auto_stop_machines = false
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  cpu_kind = "shared"
+  cpu_kind = 'shared'
   cpus = 1
   memory_mb = 512
-
-# Persistent volume for database
-[[mounts]]
-  source = "visitor_db"
-  destination = "/app/data"
-
-
