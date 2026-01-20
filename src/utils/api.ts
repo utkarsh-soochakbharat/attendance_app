@@ -250,6 +250,29 @@ export const api = {
             body: JSON.stringify({ employeeId }),
         });
     },
+
+    uploadVoice: async (file: File) => {
+        if (isElectron()) {
+            return { success: false, error: "Not supported in Electron yet" };
+        }
+
+        const formData = new FormData();
+        formData.append('voice', file);
+
+        const baseUrl = getBaseUrl();
+        // Fallback if baseUrl is null (Electron case handled above, but just in case)
+        if (!baseUrl) return { success: false, error: "No API URL" };
+
+        const response = await fetch(`${baseUrl}/upload-voice`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    }
 };
 
 export default api;

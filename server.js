@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs-extra';
+import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,11 +23,13 @@ const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'ovms.db');
 const dataDir = path.dirname(dbPath);
 const facesDir = path.join(dataDir, 'faces');
 const photosDir = path.join(dataDir, 'photos');
+const voicesDir = path.join(dataDir, 'voices');
 
 // Ensure directories exist
 fs.ensureDirSync(dataDir);
 fs.ensureDirSync(facesDir);
 fs.ensureDirSync(photosDir);
+fs.ensureDirSync(voicesDir);
 
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
@@ -70,6 +73,7 @@ const schema = `
     radius INTEGER DEFAULT 300,
     start_time TEXT DEFAULT '09:00',
     end_time TEXT DEFAULT '18:00',
+    voice_settings TEXT,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -100,6 +104,13 @@ const schema = `
 `;
 
 db.exec(schema);
+
+// Add 'voice_settings' column if it doesn't exist (for existing databases)
+try {
+    db.prepare("ALTER TABLE office_locations ADD COLUMN voice_settings TEXT").run();
+} catch (err) {
+    // Ignore error if column already exists
+}
 console.log('✅ Database schema created');
 
 // Run migrations
@@ -123,7 +134,25 @@ try {
 } catch (error) {
     console.error('Migration error:', error);
 }
+// Multer Config for Voice Uploads
+const voiceStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, voicesDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, 'voice-' + uniqueSuffix + ext);
+    }
+});
+const uploadVoice = multer({ storage: voiceStorage });
 
+// Serve static files
+app.use(express.static(path.join(__dirname, 'dist')));
+app.use('/models', express.static(path.join(__dirname, 'public/models')));
+app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+app.use('/photos', express.static(photosDir));
+app.use('/voices', express.static(voicesDir)); // Serve voice files
 // ==========================================
 // API ENDPOINTS
 // ==========================================
@@ -225,11 +254,30 @@ app.get('/api/attendance', (req, res) => {
     }
 });
 
+// Upload voice file
+app.post('/api/upload-voice', uploadVoice.single('voice'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+        // Return relative path for frontend access
+        const filePath = `/voices/${req.file.filename}`;
+        res.json({ success: true, path: filePath });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Get office locations
 app.get('/api/office-locations', (req, res) => {
     try {
         const locations = db.prepare('SELECT * FROM office_locations WHERE is_active = 1').all();
-        res.json(locations);
+        // Parse voice_settings for frontend
+        const parsedLocations = locations.map(loc => ({
+            ...loc,
+            voice_settings: loc.voice_settings ? JSON.parse(loc.voice_settings) : null
+        }));
+        res.json(parsedLocations);
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -238,13 +286,15 @@ app.get('/api/office-locations', (req, res) => {
 // Add office location
 app.post('/api/add-office-location', (req, res) => {
     try {
-        const { name, latitude, longitude, radius, start_time, end_time } = req.body;
+        const { name, latitude, longitude, radius, start_time, end_time, voice_settings } = req.body;
 
         const stmt = db.prepare(`
-            INSERT INTO office_locations (name, latitude, longitude, radius, start_time, end_time, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, 1)
+            INSERT INTO office_locations (name, latitude, longitude, radius, start_time, end_time, voice_settings, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
         `);
-        const info = stmt.run(name, latitude, longitude, radius, start_time, end_time);
+        const info = stmt.run(name, latitude, longitude, radius, start_time, end_time,
+            voice_settings ? JSON.stringify(voice_settings) : null
+        );
 
         res.json({ success: true, id: info.lastInsertRowid });
     } catch (error) {
@@ -255,14 +305,17 @@ app.post('/api/add-office-location', (req, res) => {
 // Update office location
 app.put('/api/update-office-location', (req, res) => {
     try {
-        const { id, name, latitude, longitude, radius, start_time, end_time } = req.body;
+        const { id, name, latitude, longitude, radius, start_time, end_time, voice_settings } = req.body;
 
         const stmt = db.prepare(`
             UPDATE office_locations 
-            SET name = ?, latitude = ?, longitude = ?, radius = ?, start_time = ?, end_time = ?
+            SET name = ?, latitude = ?, longitude = ?, radius = ?, start_time = ?, end_time = ?, voice_settings = ?
             WHERE id = ?
         `);
-        stmt.run(name, latitude, longitude, radius, start_time, end_time, id);
+        stmt.run(name, latitude, longitude, radius, start_time, end_time,
+            voice_settings ? JSON.stringify(voice_settings) : null,
+            id
+        );
 
         res.json({ success: true });
     } catch (error) {

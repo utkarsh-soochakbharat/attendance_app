@@ -288,28 +288,95 @@ const EmployeeAttendance = () => {
         setIsProcessing(false);
     };
 
+    const playVoiceFeedback = (type: 'late' | 'on_time' | 'check_out', settings: any) => {
+        const defaultMessages = {
+            late: "You late piece of shii!",
+            on_time: "On time! Great job.",
+            check_out: "Bye bye! See you tomorrow."
+        };
+
+        const config = settings?.voice_settings?.[type] || {};
+        const message = config.message || defaultMessages[type];
+        const audioPath = config.audio;
+
+        console.log(`🔊 Playing ${type} feedback:`, { message, audioPath });
+
+        if (audioPath) {
+            // Play uploaded audio
+            // Construct full URL
+            const baseUrl = api.getBaseUrl()?.replace('/api', ''); // remove /api suffix if present to get root, wait.
+            // My getBaseUrl returns .../api usually.
+            // voices are served at root /voices.
+            // So if base is https://app.fly.dev/api, I need https://app.fly.dev/voices/...
+            // Actually getBaseUrl returns 'https://.../api'.
+            // So:
+            const apiBase = api.getBaseUrl() || '';
+            const rootBase = apiBase.replace(/\/api$/, '');
+            const soundUrl = `${rootBase}${audioPath}`;
+
+            const audio = new Audio(soundUrl);
+            audio.play().catch(e => console.error("Audio play failed", e));
+        } else {
+            // Fallback to Text-to-Speech
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(message);
+                // Try to sound "angry" for late?
+                if (type === 'late') {
+                    utterance.rate = 1.2;
+                    utterance.pitch = 0.8;
+                    utterance.volume = 1.0;
+                } else if (type === 'on_time') {
+                    utterance.pitch = 1.2;
+                }
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+    };
+
     const processAttendance = async (employeeId: string) => {
         try {
             // Get employee's assigned office to check time bounds
             const employee = employees.find(e => e.employee_id === employeeId);
+            let assignedOffice = null;
+            let isLate = false;
+
             if (employee && employee.office_id) {
                 const offices = await api.getOfficeLocations();
-                const assignedOffice = offices.find((o: any) => o.id === employee.office_id);
+                assignedOffice = offices.find((o: any) => o.id === employee.office_id);
 
                 if (assignedOffice && assignedOffice.start_time && assignedOffice.end_time) {
                     const now = new Date();
                     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-                    if (currentTime < assignedOffice.start_time || currentTime > assignedOffice.end_time) {
-                        alert(
-                            `⏱️ Attendance Blocked - Outside Office Hours\\n\\n` +
-                            `Office: ${assignedOffice.name}\\n` +
-                            `Office Hours: ${assignedOffice.start_time} - ${assignedOffice.end_time}\\n` +
-                            `Current Time: ${currentTime}\\n\\n` +
-                            `🛡️ Time-bound geofencing prevents attendance marking outside office hours.`
-                        );
+                    // Logic:
+                    // blocked if AFTER end_time.
+                    // blocked if BEFORE start_time - 2 hours (Too early).
+
+                    // Parse times to compare easily
+                    const [startH, startM] = assignedOffice.start_time.split(':').map(Number);
+                    const [endH, endM] = assignedOffice.end_time.split(':').map(Number);
+                    const [curH, curM] = currentTime.split(':').map(Number);
+
+                    const startMinutes = startH * 60 + startM;
+                    const endMinutes = endH * 60 + endM;
+                    const curMinutes = curH * 60 + curM;
+
+                    // Allow check-in 2 hours before start time
+                    if (curMinutes < (startMinutes - 120)) {
+                        alert(`Too early to mark attendance. Office starts at ${assignedOffice.start_time}`);
                         stopCamera();
                         return;
+                    }
+
+                    if (curMinutes > endMinutes) {
+                        alert(`Office closed. Cannot mark attendance after ${assignedOffice.end_time}`);
+                        stopCamera();
+                        return;
+                    }
+
+                    // Check if Late
+                    if (curMinutes > startMinutes) {
+                        isLate = true;
                     }
                 }
             }
@@ -322,7 +389,24 @@ const EmployeeAttendance = () => {
             }
 
             if (res.success) {
-                alert(`${actionType === 'check-in' ? 'Check-in' : 'Check-out'} successful!`);
+                // Play Voice Feedback
+                if (assignedOffice) {
+                    if (actionType === 'check-in') {
+                        if (isLate) {
+                            playVoiceFeedback('late', assignedOffice);
+                            alert(`Check-in successful! (LATE)`);
+                        } else {
+                            playVoiceFeedback('on_time', assignedOffice);
+                            alert(`Check-in successful! 👍`);
+                        }
+                    } else {
+                        playVoiceFeedback('check_out', assignedOffice);
+                        alert(`Check-out successful!`);
+                    }
+                } else {
+                    alert(`${actionType === 'check-in' ? 'Check-in' : 'Check-out'} successful!`);
+                }
+
                 await loadTodayAttendance();
                 stopCamera();
             } else {

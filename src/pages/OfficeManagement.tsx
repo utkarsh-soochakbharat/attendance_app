@@ -13,7 +13,12 @@ const OfficeManagement = () => {
         longitude: '',
         radius: '300',
         start_time: '09:00',
-        end_time: '18:00'
+        end_time: '18:00',
+        voice_settings: {
+            late: { message: "u late piece of shii", audio: '' },
+            on_time: { message: "On time!", audio: '' },
+            check_out: { message: "Bye bye", audio: '' }
+        }
     });
 
     useEffect(() => {
@@ -34,6 +39,33 @@ const OfficeManagement = () => {
         setShowAdminModal(false);
     };
 
+    const handleVoiceUpload = async (event: any, type: 'late' | 'on_time' | 'check_out') => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            const res = await api.uploadVoice(file);
+            if (res.success) {
+                setFormData(prev => ({
+                    ...prev,
+                    voice_settings: {
+                        ...prev.voice_settings,
+                        [type]: {
+                            ...prev.voice_settings[type],
+                            audio: res.path
+                        }
+                    }
+                }));
+                alert(`${type} voice uploaded!`);
+            } else {
+                alert('Upload failed');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Upload error');
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -43,7 +75,8 @@ const OfficeManagement = () => {
             longitude: parseFloat(formData.longitude),
             radius: parseInt(formData.radius),
             start_time: formData.start_time,
-            end_time: formData.end_time
+            end_time: formData.end_time,
+            voice_settings: formData.voice_settings
         };
 
         if (editingOffice) {
@@ -75,7 +108,14 @@ const OfficeManagement = () => {
 
         setShowAddModal(false);
         setEditingOffice(null);
-        setFormData({ name: '', latitude: '', longitude: '', radius: '300', start_time: '09:00', end_time: '18:00' });
+        setFormData({
+            name: '', latitude: '', longitude: '', radius: '300', start_time: '09:00', end_time: '18:00',
+            voice_settings: {
+                late: { message: "u late piece of shii", audio: '' },
+                on_time: { message: "On time!", audio: '' },
+                check_out: { message: "Bye bye", audio: '' }
+            }
+        });
         loadOffices();
     };
 
@@ -87,7 +127,12 @@ const OfficeManagement = () => {
             longitude: office.longitude.toString(),
             radius: office.radius.toString(),
             start_time: office.start_time || '09:00',
-            end_time: office.end_time || '18:00'
+            end_time: office.end_time || '18:00',
+            voice_settings: office.voice_settings || {
+                late: { message: "u late piece of shii", audio: '' },
+                on_time: { message: "On time!", audio: '' },
+                check_out: { message: "Bye bye", audio: '' }
+            }
         });
         setShowAdminModal(true);
     };
@@ -406,6 +451,102 @@ const OfficeManagement = () => {
                                 </div>
                             </div>
 
+                            {/* Voice & Alerts Section */}
+                            <div style={{
+                                background: 'rgba(168, 85, 247, 0.1)',
+                                border: '1px solid rgba(168, 85, 247, 0.3)',
+                                borderRadius: '8px',
+                                padding: '1rem',
+                                marginBottom: '1rem'
+                            }}>
+                                <div style={{
+                                    fontSize: '0.9rem',
+                                    fontWeight: '600',
+                                    marginBottom: '1rem',
+                                    color: '#a855f7',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem'
+                                }}>
+                                    Voice & Alerts (Fun Mode)
+                                </div>
+
+                                {/* Late Arrival */}
+                                <div className="form-group">
+                                    <label className="form-label" style={{ color: '#a855f7' }}>Late Arrival</label>
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        placeholder="Message (e.g. u late piece of shii)"
+                                        value={formData.voice_settings?.late?.message || ''}
+                                        onChange={(e) => setFormData(prev => ({
+                                            ...prev,
+                                            voice_settings: { ...prev.voice_settings, late: { ...prev.voice_settings.late, message: e.target.value } }
+                                        }))}
+                                        style={{ marginBottom: '0.5rem' }}
+                                    />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <input
+                                            type="file"
+                                            accept="audio/*"
+                                            onChange={(e) => handleVoiceUpload(e, 'late')}
+                                            style={{ fontSize: '0.8rem' }}
+                                        />
+                                        {formData.voice_settings?.late?.audio && <span style={{ fontSize: '0.8rem', color: '#22c55e' }}>Audio Set ✓</span>}
+                                    </div>
+                                </div>
+
+                                {/* On Time */}
+                                <div className="form-group">
+                                    <label className="form-label" style={{ color: '#a855f7' }}>On Time</label>
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        placeholder="Message (e.g. On Time!)"
+                                        value={formData.voice_settings?.on_time?.message || ''}
+                                        onChange={(e) => setFormData(prev => ({
+                                            ...prev,
+                                            voice_settings: { ...prev.voice_settings, on_time: { ...prev.voice_settings.on_time, message: e.target.value } }
+                                        }))}
+                                        style={{ marginBottom: '0.5rem' }}
+                                    />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <input
+                                            type="file"
+                                            accept="audio/*"
+                                            onChange={(e) => handleVoiceUpload(e, 'on_time')}
+                                            style={{ fontSize: '0.8rem' }}
+                                        />
+                                        {formData.voice_settings?.on_time?.audio && <span style={{ fontSize: '0.8rem', color: '#22c55e' }}>Audio Set ✓</span>}
+                                    </div>
+                                </div>
+
+                                {/* Check Out */}
+                                <div className="form-group">
+                                    <label className="form-label" style={{ color: '#a855f7' }}>Check Out</label>
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        placeholder="Message (e.g. Bye bye)"
+                                        value={formData.voice_settings?.check_out?.message || ''}
+                                        onChange={(e) => setFormData(prev => ({
+                                            ...prev,
+                                            voice_settings: { ...prev.voice_settings, check_out: { ...prev.voice_settings.check_out, message: e.target.value } }
+                                        }))}
+                                        style={{ marginBottom: '0.5rem' }}
+                                    />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <input
+                                            type="file"
+                                            accept="audio/*"
+                                            onChange={(e) => handleVoiceUpload(e, 'check_out')}
+                                            style={{ fontSize: '0.8rem' }}
+                                        />
+                                        {formData.voice_settings?.check_out?.audio && <span style={{ fontSize: '0.8rem', color: '#22c55e' }}>Audio Set ✓</span>}
+                                    </div>
+                                </div>
+                            </div>
+
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
                                 <button
                                     type="button"
@@ -413,7 +554,14 @@ const OfficeManagement = () => {
                                     onClick={() => {
                                         setShowAddModal(false);
                                         setEditingOffice(null);
-                                        setFormData({ name: '', latitude: '', longitude: '', radius: '300', start_time: '09:00', end_time: '18:00' });
+                                        setFormData({
+                                            name: '', latitude: '', longitude: '', radius: '300', start_time: '09:00', end_time: '18:00',
+                                            voice_settings: {
+                                                late: { message: "u late piece of shii", audio: '' },
+                                                on_time: { message: "On time!", audio: '' },
+                                                check_out: { message: "Bye bye", audio: '' }
+                                            }
+                                        });
                                     }}
                                     style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }}
                                 >
