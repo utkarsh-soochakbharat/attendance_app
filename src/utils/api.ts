@@ -19,19 +19,21 @@ const getBaseUrl = () => {
         return storedUrl;
     }
 
-    // For Capacitor mobile apps, use Fly.io cloud server
+    // Production Cloud URL (Fly.io)
+    const PROD_URL = 'https://attendance-app-v5jdla.fly.dev/api';
+
+    // For Capacitor mobile apps, use Cloud URL
     if (isCapacitor()) {
-        // Production Fly.io URL - works automatically!
-        return 'https://attendance-app-he-mtg.fly.dev/api';
+        return PROD_URL;
     }
 
     // For Electron desktop, use IPC (local database)
     if (isElectron()) {
-        return null; // Will use IPC instead
+        return null;
     }
 
-    // For browser development, use localhost
-    return 'http://localhost:3000/api';
+    // For Web Browser (Admin Dashboard), also use Cloud URL so you see the same data!
+    return PROD_URL;
 };
 
 // Generic API call function
