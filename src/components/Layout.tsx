@@ -144,13 +144,7 @@ const Layout: React.FC = () => {
                     >
                         Set Geofencing
                     </div>
-                    <div
-                        onClick={changeServerUrl}
-                        className="nav-item"
-                        style={{ cursor: 'pointer', marginTop: '20px', color: '#888' }}
-                    >
-                        ⚙️ Server Config
-                    </div>
+
                 </nav>
                 <div className="user-profile">
                     <span>Admin</span>

@@ -10,15 +10,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 
-// Initialize Database
-const dbPath = path.join(__dirname, 'ovms.db');
+// Initialize Database with environment variable support
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'ovms.db');
+const dataDir = path.dirname(dbPath);
+const facesDir = path.join(dataDir, 'faces');
+const photosDir = path.join(dataDir, 'photos');
+
+// Ensure directories exist
+fs.ensureDirSync(dataDir);
+fs.ensureDirSync(facesDir);
+fs.ensureDirSync(photosDir);
+
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 
@@ -158,15 +167,11 @@ app.post('/api/register-employee', (req, res) => {
         }
 
         // Save face descriptor
-        const faceDir = path.join(__dirname, 'faces');
-        fs.ensureDirSync(faceDir);
-        const facePath = path.join(faceDir, `${employee_id}.json`);
+        const facePath = path.join(facesDir, `${employee_id}.json`);
         fs.writeFileSync(facePath, face_descriptor);
 
         // Save photo
-        const photoDir = path.join(__dirname, 'photos');
-        fs.ensureDirSync(photoDir);
-        const photoPath = path.join(photoDir, `${employee_id}.jpg`);
+        const photoPath = path.join(photosDir, `${employee_id}.jpg`);
 
         // Convert base64 to image file
         if (photo) {

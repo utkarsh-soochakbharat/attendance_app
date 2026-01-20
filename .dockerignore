@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-electron
+android
+electron
+.git
+.gitignore
+*.md
+.env
+ovms.db
+data
+.vscode
+.DS_Store
+*.log
+
+

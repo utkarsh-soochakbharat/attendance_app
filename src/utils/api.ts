@@ -5,38 +5,39 @@ const isElectron = () => {
 };
 
 const isCapacitor = () => {
-    return typeof window !== 'undefined' && 
-           (window.Capacitor !== undefined || 
+    return typeof window !== 'undefined' &&
+        (window.Capacitor !== undefined ||
             (window as any).Capacitor !== undefined ||
             // Check for Capacitor user agent or platform
             navigator.userAgent.includes('Capacitor'));
 };
 
 const getBaseUrl = () => {
-    // Check if API URL is configured
+    // Check if API URL is configured (allows override)
     const storedUrl = localStorage.getItem('API_URL');
     if (storedUrl) {
         return storedUrl;
     }
-    
-    // For Capacitor mobile apps, default to a common development IP
-    // User should configure this to their PC's IP address
+
+    // For Capacitor mobile apps, use Fly.io cloud server
     if (isCapacitor()) {
-        // Try to get from config or use a default
-        // In production, this should be configured
-        const defaultMobileUrl = 'http://192.168.1.100:3000/api'; // Common default, user should change
-        console.warn('⚠️ Capacitor detected: Using default API URL. Configure API_URL in localStorage for your PC IP address.');
-        return defaultMobileUrl;
+        // Production Fly.io URL - works automatically!
+        return 'https://attendance-app-he-mtg.fly.dev/api';
     }
-    
-    // For browser/Electron, use localhost
+
+    // For Electron desktop, use IPC (local database)
+    if (isElectron()) {
+        return null; // Will use IPC instead
+    }
+
+    // For browser development, use localhost
     return 'http://localhost:3000/api';
 };
 
 // Generic API call function
 const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     const baseUrl = getBaseUrl();
-    
+
     try {
         const response = await fetch(`${baseUrl}${endpoint}`, {
             ...options,
