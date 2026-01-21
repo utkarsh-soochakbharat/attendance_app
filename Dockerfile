@@ -14,8 +14,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (include devDependencies for build)
-RUN npm install
+# Install dependencies (force Linux x64 for Rollup)
+RUN npm install --os=linux --cpu=x64
 
 # Copy all source files
 COPY . .
