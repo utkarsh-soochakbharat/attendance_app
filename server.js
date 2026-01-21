@@ -509,9 +509,15 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'API server is running' });
 });
 
-// Catch-all route to serve React App for non-API requests (SPA support)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// Catch‑all route for SPA support
+app.use((req, res) => {
+    const indexPath = path.join(__dirname, 'dist', 'index.html');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        // If the build hasn't been run yet, return a simple JSON response
+        res.status(200).json({ message: 'Frontend not built – run `npm run build` locally.' });
+    }
 });
 
 // Start server
