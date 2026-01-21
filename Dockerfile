@@ -14,8 +14,14 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (force Linux x64 for Rollup)
-RUN npm install --os=linux --cpu=x64
+# Set npm to install correct optional binaries for Linux x64
+ENV npm_config_arch=x64 \
+    npm_config_platform=linux
+
+# Install dependencies (include devDependencies for Vite build) with explicit arch/platform
+RUN npm install --arch=x64 --platform=linux
+# Explicitly install Rollup native binary required by Vite
+RUN npm install @rollup/rollup-linux-x64-gnu
 
 # Copy all source files
 COPY . .
