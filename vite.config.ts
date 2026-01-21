@@ -3,11 +3,13 @@ import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
 
+const isWebBuild = process.env.VITE_SKIP_ELECTRON === 'true';
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    electron({
+    !isWebBuild && electron({
       main: {
         // Shortcut of `build.lib.entry`.
         entry: 'electron/main.ts',
@@ -32,7 +34,7 @@ export default defineConfig({
         ? undefined
         : {},
     }),
-  ],
+  ].filter(Boolean),
   server: {
     // Allow ngrok and other tunneling services for mobile testing
     allowedHosts: ['.ngrok-free.dev', '.ngrok.io', '.loca.lt'],

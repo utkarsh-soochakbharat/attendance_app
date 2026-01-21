@@ -21,6 +21,7 @@ RUN npm install
 COPY . .
 
 # Build frontend (Vite)
+ENV VITE_SKIP_ELECTRON=true
 RUN npx vite build
 
 # Create data directory for database
