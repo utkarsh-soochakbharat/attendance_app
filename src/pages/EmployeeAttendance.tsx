@@ -304,13 +304,9 @@ const EmployeeAttendance = () => {
         if (audioPath) {
             // Play uploaded audio
             // Construct full URL
-            const baseUrl = api.getBaseUrl()?.replace('/api', ''); // remove /api suffix if present to get root, wait.
-            // My getBaseUrl returns .../api usually.
-            // voices are served at root /voices.
-            // So if base is https://app.fly.dev/api, I need https://app.fly.dev/voices/...
-            // Actually getBaseUrl returns 'https://.../api'.
-            // So:
-            const apiBase = api.getBaseUrl() || '';
+            const baseUrl = api.getCurrentBaseUrl()?.replace('/api', '');
+
+            const apiBase = api.getCurrentBaseUrl() || '';
             const rootBase = apiBase.replace(/\/api$/, '');
             const soundUrl = `${rootBase}${audioPath}`;
 
@@ -389,22 +385,27 @@ const EmployeeAttendance = () => {
             }
 
             if (res.success) {
-                // Play Voice Feedback
-                if (assignedOffice) {
-                    if (actionType === 'check-in') {
-                        if (isLate) {
-                            playVoiceFeedback('late', assignedOffice);
-                            alert(`Check-in successful! (LATE)`);
-                        } else {
-                            playVoiceFeedback('on_time', assignedOffice);
-                            alert(`Check-in successful! 👍`);
-                        }
+                // Play Voice Feedback (Non-blocking)
+                // Use assignedOffice settings if available, otherwise use defaults
+                const settingsToUse = assignedOffice || {
+                    voice_settings: {
+                        late: { message: "You are late!", audio: null },
+                        on_time: { message: "Checked in on time!", audio: null },
+                        check_out: { message: "Goodbye!", audio: null }
+                    }
+                };
+
+                if (actionType === 'check-in') {
+                    if (isLate) {
+                        playVoiceFeedback('late', settingsToUse);
+                        setTimeout(() => alert(`Check-in successful! (LATE)`), 500);
                     } else {
-                        playVoiceFeedback('check_out', assignedOffice);
-                        alert(`Check-out successful!`);
+                        playVoiceFeedback('on_time', settingsToUse);
+                        setTimeout(() => alert(`Check-in successful! 👍`), 500);
                     }
                 } else {
-                    alert(`${actionType === 'check-in' ? 'Check-in' : 'Check-out'} successful!`);
+                    playVoiceFeedback('check_out', settingsToUse);
+                    setTimeout(() => alert(`Check-out successful!`), 500);
                 }
 
                 await loadTodayAttendance();
