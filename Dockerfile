@@ -14,14 +14,17 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --only=production
+# Install dependencies (include devDependencies for build)
+RUN npm install
 
-# Copy server files
-COPY server.js ./
+# Copy all source files
+COPY . .
+
+# Build frontend (Vite)
+RUN npx vite build
 
 # Create data directory for database
-RUN mkdir -p /app/data/faces /app/data/photos
+RUN mkdir -p /app/data/faces /app/data/photos /app/data/voices
 
 # Expose port (Fly.io will set PORT env var)
 EXPOSE 3000

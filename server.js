@@ -509,6 +509,11 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'API server is running' });
 });
 
+// Catch-all route to serve React App for non-API requests (SPA support)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 API Server running on http://localhost:${PORT}`);
