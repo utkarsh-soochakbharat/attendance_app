@@ -14,11 +14,11 @@ WORKDIR /app
 # Copy ONLY package files first (for better Docker layer caching)
 COPY package*.json ./
 
-# Install dependencies INSIDE Docker (Linux build)
-# This ensures better-sqlite3 is compiled for Linux, not Windows
-RUN npm install
+# Skip electron-builder postinstall script in Docker
+# Install dependencies without running postinstall scripts
+RUN npm install --ignore-scripts
 
-# Force rebuild better-sqlite3 for the correct Node.js version and platform
+# Now manually install better-sqlite3 and rebuild for Node.js (not Electron)
 RUN npm rebuild better-sqlite3 --build-from-source
 
 # Explicitly install Rollup native binary (fixes npm optional dependencies bug)
