@@ -1,5 +1,5 @@
-# Use Node.js 20 LTS
-FROM node:20-slim
+# Use Node.js 20 LTS (bullseye for better compatibility)
+FROM node:20-bullseye
 
 # Install build dependencies for better-sqlite3
 RUN apt-get update && apt-get install -y \
@@ -11,19 +11,14 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy ONLY package files first (for better Docker layer caching)
 COPY package*.json ./
 
-# Set npm to install correct optional binaries for Linux x64
-ENV npm_config_arch=x64 \
-    npm_config_platform=linux
+# Install dependencies INSIDE Docker (Linux build)
+# This ensures better-sqlite3 is compiled for Linux, not Windows
+RUN npm install
 
-# Install dependencies (include devDependencies for Vite build) with explicit arch/platform
-RUN npm install --arch=x64 --platform=linux
-# Explicitly install Rollup native binary required by Vite
-RUN npm install @rollup/rollup-linux-x64-gnu
-
-# Copy all source files
+# Copy rest of application files (node_modules is excluded via .dockerignore)
 COPY . .
 
 # Build frontend (Vite)
@@ -42,5 +37,14 @@ ENV NODE_ENV=production
 
 # Start server
 CMD ["node", "server.js"]
+
+
+
+
+
+
+
+
+
 
 

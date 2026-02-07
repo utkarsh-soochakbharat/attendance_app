@@ -12,5 +12,21 @@ data
 .vscode
 .DS_Store
 *.log
+release
+faces
+photos
+*.db
+*.db-shm
+*.db-wal
+.env.example
+
+
+
+
+
+
+
+
+
 
 
