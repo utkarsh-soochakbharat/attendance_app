@@ -17,7 +17,7 @@ primary_region = 'bom'
   destination = '/app/data'
 
 [http_service]
-  internal_port = 3000
+  internal_port = 3001
   force_https = true
 
   # Keep at least 1 machine running to avoid cold starts

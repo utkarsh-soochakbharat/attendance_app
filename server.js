@@ -31,7 +31,7 @@ function log(...args) {
 log('server.js starting. __dirname =', __dirname);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 log('PORT from env:', process.env.PORT, 'Final PORT:', PORT);
 
 // Middleware

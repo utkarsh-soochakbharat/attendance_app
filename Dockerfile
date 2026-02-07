@@ -35,7 +35,7 @@ RUN npx vite build
 RUN mkdir -p /app/data/faces /app/data/photos /app/data/voices
 
 # Expose port (Fly.io will set PORT env var)
-EXPOSE 3000
+EXPOSE 3001
 
 # Set environment variable for database path
 ENV DATABASE_PATH=/app/data/ovms.db
