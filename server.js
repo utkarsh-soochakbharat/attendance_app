@@ -892,58 +892,58 @@ app.use((req, res) => {
 try {
     app.listen(PORT, '0.0.0.0', async () => {
         log('✅ Server started successfully on port', PORT);
-        console.log(`🚀 API Server running on http://localhost:${PORT}`);
+        console.log(`🚀 API Server running on http://0.0.0.0:${PORT}`);
         console.log(`Database: ${dbPath}`);
-    console.log(`\n📡 Available endpoints:`);
-    console.log(`   GET  /api/health`);
-    console.log(`   GET  /api/employees`);
-    console.log(`   POST /api/register-employee`);
-    console.log(`   GET  /api/attendance`);
-    console.log(`   POST /api/mark-attendance`);
-    console.log(`   GET  /api/office-locations`);
-    console.log(`   POST /api/add-office-location`);
-    console.log(`   PUT  /api/update-office-location`);
-    console.log(`   DELETE /api/delete-office-location/:id`);
-    console.log(`   GET  /api/visitors`);
-    console.log(`   POST /api/add-visitor`);
-    console.log(`   POST /api/send-monthly-attendance`);
-    console.log(``);
+        console.log(`\n📡 Available endpoints:`);
+        console.log(`   GET  /api/health`);
+        console.log(`   GET  /api/employees`);
+        console.log(`   POST /api/register-employee`);
+        console.log(`   GET  /api/attendance`);
+        console.log(`   POST /api/mark-attendance`);
+        console.log(`   GET  /api/office-locations`);
+        console.log(`   POST /api/add-office-location`);
+        console.log(`   PUT  /api/update-office-location`);
+        console.log(`   DELETE /api/delete-office-location/:id`);
+        console.log(`   GET  /api/visitors`);
+        console.log(`   POST /api/add-visitor`);
+        console.log(`   POST /api/send-monthly-attendance`);
+        console.log(``);
 
-    // Test email configuration on startup
-    try {
-        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-            await testEmailConfig();
-            console.log(`📧 Email service configured and ready`);
-        } else {
-            console.log(`⚠️  Email service not configured (set EMAIL_USER and EMAIL_PASS)`);
+        // Test email configuration on startup
+        try {
+            if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+                await testEmailConfig();
+                console.log(`📧 Email service configured and ready`);
+            } else {
+                console.log(`⚠️  Email service not configured (set EMAIL_USER and EMAIL_PASS)`);
+            }
+        } catch (error) {
+            console.log(`⚠️  Email configuration error: ${error.message}`);
         }
-    } catch (error) {
-        console.log(`⚠️  Email configuration error: ${error.message}`);
-    }
 
-    // Setup automated monthly attendance email scheduler
-    // Runs at 11:59 PM on days 28-31 of every month
-    // Only sends if tomorrow is the 1st (meaning today is the last day of the month)
-    cron.schedule('59 23 28-31 * *', async () => {
-        const today = new Date();
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        // Setup automated monthly attendance email scheduler
+        // Runs at 11:59 PM on days 28-31 of every month
+        // Only sends if tomorrow is the 1st (meaning today is the last day of the month)
+        cron.schedule('59 23 28-31 * *', async () => {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
 
-        // Only run if tomorrow is the 1st (meaning today is last day of month)
-        if (tomorrow.getDate() === 1) {
-            console.log('📧 Starting automated monthly attendance email send...');
+            // Only run if tomorrow is the 1st (meaning today is last day of month)
+            if (tomorrow.getDate() === 1) {
+                console.log('📧 Starting automated monthly attendance email send...');
 
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const year = String(today.getFullYear());
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const year = String(today.getFullYear());
 
-            try {
-                // Send to all employees
-                const employees = db.prepare('SELECT * FROM employees WHERE is_active = 1').all();
-                let successCount = 0;
-                let failCount = 0;
+                try {
+                    // Send to all employees
+                    const employees = db.prepare('SELECT * FROM employees WHERE is_active = 1').all();
+                    let successCount = 0;
+                    let failCount = 0;
 
-                for (const employee of employees) {
-                    const records = db.prepare(`
+                    for (const employee of employees) {
+                        const records = db.prepare(`
                         SELECT a.type, a.timestamp, DATE(a.timestamp) as date
                         FROM attendance a
                         WHERE a.employee_id = ?
@@ -952,64 +952,64 @@ try {
                         ORDER BY a.timestamp ASC
                     `).all(employee.id, month, year);
 
-                    const dailyAttendance = {};
-                    records.forEach(record => {
-                        if (!dailyAttendance[record.date]) {
-                            dailyAttendance[record.date] = { check_in: null, check_out: null };
-                        }
-                        if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) {
-                            dailyAttendance[record.date].check_in = record.timestamp;
-                        }
-                        if (record.type === 'check-out') {
-                            dailyAttendance[record.date].check_out = record.timestamp;
-                        }
-                    });
+                        const dailyAttendance = {};
+                        records.forEach(record => {
+                            if (!dailyAttendance[record.date]) {
+                                dailyAttendance[record.date] = { check_in: null, check_out: null };
+                            }
+                            if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) {
+                                dailyAttendance[record.date].check_in = record.timestamp;
+                            }
+                            if (record.type === 'check-out') {
+                                dailyAttendance[record.date].check_out = record.timestamp;
+                            }
+                        });
 
-                    const result = await sendEmployeeMonthlyReport(
-                        { id: employee.employee_id, name: employee.name, email: employee.email, department: employee.department },
-                        dailyAttendance, month, year
+                        const result = await sendEmployeeMonthlyReport(
+                            { id: employee.employee_id, name: employee.name, email: employee.email, department: employee.department },
+                            dailyAttendance, month, year
+                        );
+                        if (result.success) successCount++; else failCount++;
+                    }
+
+                    // Send consolidated to HR/Founder
+                    const hrEmployees = employees.filter(e =>
+                        e.designation?.toLowerCase().includes('hr') || e.designation?.toLowerCase().includes('founder')
                     );
-                    if (result.success) successCount++; else failCount++;
-                }
 
-                // Send consolidated to HR/Founder
-                const hrEmployees = employees.filter(e =>
-                    e.designation?.toLowerCase().includes('hr') || e.designation?.toLowerCase().includes('founder')
-                );
-
-                if (hrEmployees.length > 0) {
-                    const allEmployeesData = employees.map(employee => {
-                        const records = db.prepare(`
+                    if (hrEmployees.length > 0) {
+                        const allEmployeesData = employees.map(employee => {
+                            const records = db.prepare(`
                             SELECT a.type, a.timestamp, DATE(a.timestamp) as date
                             FROM attendance a WHERE a.employee_id = ?
                             AND strftime('%m', a.timestamp) = ? AND strftime('%Y', a.timestamp) = ?
                         `).all(employee.id, month, year);
-                        const dailyAttendance = {};
-                        records.forEach(record => {
-                            if (!dailyAttendance[record.date]) dailyAttendance[record.date] = { check_in: null, check_out: null };
-                            if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) dailyAttendance[record.date].check_in = record.timestamp;
-                            if (record.type === 'check-out') dailyAttendance[record.date].check_out = record.timestamp;
+                            const dailyAttendance = {};
+                            records.forEach(record => {
+                                if (!dailyAttendance[record.date]) dailyAttendance[record.date] = { check_in: null, check_out: null };
+                                if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) dailyAttendance[record.date].check_in = record.timestamp;
+                                if (record.type === 'check-out') dailyAttendance[record.date].check_out = record.timestamp;
+                            });
+                            return { employee: { id: employee.employee_id, name: employee.name, email: employee.email, department: employee.department }, attendance: dailyAttendance };
                         });
-                        return { employee: { id: employee.employee_id, name: employee.name, email: employee.email, department: employee.department }, attendance: dailyAttendance };
-                    });
 
-                    for (const hrEmployee of hrEmployees) {
-                        const result = await sendConsolidatedReport(
-                            { id: hrEmployee.employee_id, name: hrEmployee.name, email: hrEmployee.email, department: hrEmployee.department },
-                            allEmployeesData, month, year
-                        );
-                        if (result.success) successCount++; else failCount++;
+                        for (const hrEmployee of hrEmployees) {
+                            const result = await sendConsolidatedReport(
+                                { id: hrEmployee.employee_id, name: hrEmployee.name, email: hrEmployee.email, department: hrEmployee.department },
+                                allEmployeesData, month, year
+                            );
+                            if (result.success) successCount++; else failCount++;
+                        }
                     }
+
+                    console.log(`✅ Monthly emails sent! Success: ${successCount}, Failed: ${failCount}`);
+                } catch (error) {
+                    console.error('❌ Error in automated monthly email:', error);
                 }
-
-                console.log(`✅ Monthly emails sent! Success: ${successCount}, Failed: ${failCount}`);
-            } catch (error) {
-                console.error('❌ Error in automated monthly email:', error);
             }
-        }
-    }, { timezone: "Asia/Kolkata" });
+        }, { timezone: "Asia/Kolkata" });
 
-    console.log(`⏰ Automated monthly email scheduler activated (IST timezone)`);
+        console.log(`⏰ Automated monthly email scheduler activated (IST timezone)`);
     }).on('error', (err) => {
         log('❌ Server failed to start:', err.message || err);
         console.error('❌ Server failed to start:', err);
