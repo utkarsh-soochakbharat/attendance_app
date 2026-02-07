@@ -9,14 +9,17 @@ import VisitorList from './pages/VisitorList';
 import Appointments from './pages/Appointments';
 import EmployeeRegistration from './pages/EmployeeRegistration';
 import EmployeeAttendance from './pages/EmployeeAttendance';
+import AttendanceReports from './pages/AttendanceReports';
 import GeofencingSetup from './pages/GeofencingSetup';
 import OfficeManagement from './pages/OfficeManagement';
+import KioskMode from './pages/KioskMode';
 
 function App() {
   return (
     <HashRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/kiosk" element={<KioskMode />} />
         <Route element={<Layout />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
@@ -25,6 +28,7 @@ function App() {
           <Route path="/visitors" element={<VisitorList />} />
           <Route path="/employee-registration" element={<EmployeeRegistration />} />
           <Route path="/employee-attendance" element={<EmployeeAttendance />} />
+          <Route path="/attendance-reports" element={<AttendanceReports />} />
           <Route path="/geofencing-setup" element={<GeofencingSetup />} />
           <Route path="/office-management" element={<OfficeManagement />} />
         </Route>

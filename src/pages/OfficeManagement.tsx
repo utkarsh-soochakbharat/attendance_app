@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import FaceAuthModal from '../components/FaceAuthModal';
 import AdminVerificationModal from '../components/AdminVerificationModal';
 
 const OfficeManagement = () => {
@@ -203,14 +205,26 @@ const OfficeManagement = () => {
                 onClose={() => {
                     setShowAdminModal(false);
                     setEditingOffice(null);
-                    setFormData({ name: '', latitude: '', longitude: '', radius: '300', start_time: '09:00', end_time: '18:00' });
+                    setFormData({ 
+                        name: '', 
+                        latitude: '', 
+                        longitude: '', 
+                        radius: '300', 
+                        start_time: '09:00', 
+                        end_time: '18:00',
+                        voice_settings: {
+                            late: { message: "u late piece of shii", audio: '' },
+                            on_time: { message: "On time!", audio: '' },
+                            check_out: { message: "Bye bye", audio: '' }
+                        }
+                    });
                 }}
                 onVerified={handleAdminVerified}
             />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <div>
-                    <h1>🏢 Office Locations</h1>
+                    <h1>Office Locations</h1>
                     <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
                         Manage multiple office branches and their geofencing settings
                     </p>
@@ -319,10 +333,20 @@ const OfficeManagement = () => {
                     backgroundColor: 'rgba(0,0,0,0.85)',
                     display: 'flex',
                     justifyContent: 'center',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
+                    padding: '20px',
+                    overflowY: 'auto',
                     backdropFilter: 'blur(5px)'
                 }}>
-                    <div className="card" style={{ maxWidth: '500px', width: '90%', padding: '2rem' }}>
+                    <div className="card" style={{ 
+                        maxWidth: '500px', 
+                        width: '100%', 
+                        padding: '1.5rem',
+                        marginTop: '20px',
+                        marginBottom: '20px',
+                        maxHeight: '90vh',
+                        overflowY: 'auto'
+                    }}>
                         <h2 style={{ marginBottom: '1.5rem' }}>
                             {editingOffice ? 'Edit Office Location' : '➕ Add Office Location'}
                         </h2>

@@ -1,16 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import VisitorBadge from '../components/VisitorBadge';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import api from '../utils/api';
+import FaceAuthModal from '../components/FaceAuthModal';
 
 const CheckIn = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const [form, setForm] = useState({ name: '', phone: '', email: '', company: '', host_employee: '', purpose: '' });
     const [lastVisitor, setLastVisitor] = useState<any>(null);
     const [showModal, setShowModal] = useState(false);
     const [customLogo, setCustomLogo] = useState<string | null>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [showAuthModal, setShowAuthModal] = useState(true);
+    const [authenticatedUser, setAuthenticatedUser] = useState<any>(null);
 
     const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -232,148 +237,177 @@ const CheckIn = () => {
 
     return (
         <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', gap: '2rem' }}>
-            <div style={{ flex: 1 }}>
-                <h1>Visitor Check-In</h1>
-                <div className="card" style={{ marginTop: '1.5rem' }}>
-                    <form onSubmit={handleSubmit}>
-                        <div className="form-group">
-                            <label className="form-label">Visitor Name</label>
-                            <input className="form-input" name="name" required value={form.name} onChange={handleChange} />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Phone Number</label>
-                            <input className="form-input" name="phone" required value={form.phone} onChange={handleChange} />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Email (Optional)</label>
-                            <input className="form-input" name="email" type="email" value={form.email} onChange={handleChange} />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Company</label>
-                            <input className="form-input" name="company" value={form.company} onChange={handleChange} />
-                        </div>
+            <FaceAuthModal
+                isOpen={showAuthModal}
+                onClose={() => {
+                    setShowAuthModal(false);
+                    navigate('/');
+                }}
+                onAuthenticated={(employee) => {
+                    setAuthenticatedUser(employee);
+                    setIsAuthenticated(true);
+                    setShowAuthModal(false);
+                }}
+                requiredRoles={['HR', 'Founder', 'Manager', 'Receptionist']}
+                title="Visitor Check-In - Authentication Required"
+            />
 
-                        <div className="form-group">
-                            <label className="form-label">Badge Logo (Optional)</label>
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                <button
-                                    type="button"
-                                    className="btn"
-                                    onClick={() => logoInputRef.current?.click()}
-                                    style={{ border: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.05)', color: 'white' }}
-                                >
-                                    {customLogo ? 'Change Logo' : 'Upload Company Logo'}
-                                </button>
-                                {customLogo && (
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                        Logo selected
+            {!isAuthenticated ? (
+                <div style={{ textAlign: 'center', padding: '3rem', width: '100%' }}>
+                    <p style={{ color: 'var(--text-muted)' }}>Please authenticate to access visitor check-in</p>
+                </div>
+            ) : (
+                <>
+                    <div style={{ flex: 1 }}>
+                        <h1>Visitor Check-In</h1>
+                        {authenticatedUser && (
+                            <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '5px' }}>
+                                Authenticated as: {authenticatedUser.name}
+                            </p>
+                        )}
+                        <div className="card" style={{ marginTop: '1.5rem' }}>
+                            <form onSubmit={handleSubmit}>
+                                <div className="form-group">
+                                    <label className="form-label">Visitor Name</label>
+                                    <input className="form-input" name="name" required value={form.name} onChange={handleChange} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Phone Number</label>
+                                    <input className="form-input" name="phone" required value={form.phone} onChange={handleChange} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Email (Optional)</label>
+                                    <input className="form-input" name="email" type="email" value={form.email} onChange={handleChange} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Company</label>
+                                    <input className="form-input" name="company" value={form.company} onChange={handleChange} />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Badge Logo (Optional)</label>
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                         <button
                                             type="button"
-                                            onClick={() => setCustomLogo(null)}
-                                            style={{ marginLeft: '10px', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
+                                            className="btn"
+                                            onClick={() => logoInputRef.current?.click()}
+                                            style={{ border: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.05)', color: 'white' }}
                                         >
-                                            Remove
+                                            {customLogo ? 'Change Logo' : 'Upload Company Logo'}
                                         </button>
+                                        {customLogo && (
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                Logo selected
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCustomLogo(null)}
+                                                    style={{ marginLeft: '10px', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                            <input
-                                type="file"
-                                ref={logoInputRef}
-                                style={{ display: 'none' }}
-                                accept="image/*"
-                                onChange={handleLogoUpload}
-                            />
-                        </div>
+                                    <input
+                                        type="file"
+                                        ref={logoInputRef}
+                                        style={{ display: 'none' }}
+                                        accept="image/*"
+                                        onChange={handleLogoUpload}
+                                    />
+                                </div>
 
-                        <div className="form-group">
-                            <label className="form-label">Host</label>
-                            <input className="form-input" name="purpose" value={form.purpose} onChange={handleChange} />
+                                <div className="form-group">
+                                    <label className="form-label">Host</label>
+                                    <input className="form-input" name="purpose" value={form.purpose} onChange={handleChange} />
+                                </div>
+                                <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>Check In & Print Badge</button>
+                            </form>
                         </div>
-                        <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>Check In & Print Badge</button>
-                    </form>
-                </div>
-            </div>
+                    </div>
 
-            {/* Camera Section */}
-            <div style={{ width: '300px' }}>
-                <h3 style={{ marginBottom: '1rem' }}>Visitor Photo</h3>
-                <div className="card" style={{ padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                    {/* Camera Section */}
+                    <div style={{ width: '300px' }}>
+                        <h3 style={{ marginBottom: '1rem' }}>Visitor Photo</h3>
+                        <div className="card" style={{ padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
 
-                    {isCameraOpen ? (
-                        <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'black' }}>
-                            <video ref={videoRef} autoPlay playsInline style={{ width: '100%' }} />
-                        </div>
-                    ) : photo ? (
-                        <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden' }}>
-                            <img src={photo} alt="Captured" style={{ width: '100%' }} />
-                        </div>
-                    ) : (
-                        <div style={{ width: '100%', aspectRatio: '1/1', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                            No Photo
-                        </div>
-                    )}
-
-                    <canvas ref={canvasRef} style={{ display: 'none' }} />
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        style={{ display: 'none' }}
-                        accept="image/*"
-                        onChange={handleFileUpload}
-                    />
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-                        <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
-                            {!isCameraOpen ? (
-                                <button className="btn" type="button" onClick={startCamera} style={{ flex: 1, border: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.05)', color: 'white' }}>
-                                    {photo ? 'Retake Photo' : 'Open Camera'}
-                                </button>
+                            {isCameraOpen ? (
+                                <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'black' }}>
+                                    <video ref={videoRef} autoPlay playsInline style={{ width: '100%' }} />
+                                </div>
+                            ) : photo ? (
+                                <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden' }}>
+                                    <img src={photo} alt="Captured" style={{ width: '100%' }} />
+                                </div>
                             ) : (
-                                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
-                                    <button className="btn btn-primary" type="button" onClick={capturePhoto} style={{ flex: 1 }}>
-                                        Capture
-                                    </button>
-                                    <button className="btn" type="button" onClick={stopCamera} style={{ background: 'var(--danger)', color: 'white' }}>
-                                        X
-                                    </button>
+                                <div style={{ width: '100%', aspectRatio: '1/1', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                                    No Photo
                                 </div>
                             )}
-                        </div>
-                        {!isCameraOpen && (
-                            <button className="btn" type="button" onClick={() => fileInputRef.current?.click()} style={{ width: '100%', border: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.05)', color: 'white' }}>
-                                Upload Photo
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
 
-            {/* Modal / Print Area */}
-            {showModal && lastVisitor && (
-                <div className="print-modal-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-                    <div className="print-modal-content" style={{ padding: '0', maxWidth: '400px', width: '90%', border: '1px solid rgba(255,255,255,0.1)', overflow: "hidden" }}>
-                        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Ready to Print</h2>
-                            <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
-                        </div>
+                            <canvas ref={canvasRef} style={{ display: 'none' }} />
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                style={{ display: 'none' }}
+                                accept="image/*"
+                                onChange={handleFileUpload}
+                            />
 
-                        <div className="print-preview-container" style={{ padding: '2rem', display: 'flex', justifyContent: 'center', background: '#e2e8f0' }}>
-                            {/* Wrapper for Print Area */}
-                            <div id="print-area" className="print-area">
-                                <VisitorBadge visitor={lastVisitor} customLogo={customLogo || undefined} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                                    {!isCameraOpen ? (
+                                        <button className="btn" type="button" onClick={startCamera} style={{ flex: 1, border: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.05)', color: 'white' }}>
+                                            {photo ? 'Retake Photo' : 'Open Camera'}
+                                        </button>
+                                    ) : (
+                                        <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                                            <button className="btn btn-primary" type="button" onClick={capturePhoto} style={{ flex: 1 }}>
+                                                Capture
+                                            </button>
+                                            <button className="btn" type="button" onClick={stopCamera} style={{ background: 'var(--danger)', color: 'white' }}>
+                                                X
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                {!isCameraOpen && (
+                                    <button className="btn" type="button" onClick={() => fileInputRef.current?.click()} style={{ width: '100%', border: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.05)', color: 'white' }}>
+                                        Upload Photo
+                                    </button>
+                                )}
                             </div>
                         </div>
-
-                        <div style={{ padding: '1.5rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end', background: 'var(--bg-glass-strong)' }}>
-                            <button className="btn" style={{ background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-main)' }} onClick={() => setShowModal(false)}>Close</button>
-                            <button className="btn" style={{ background: 'var(--secondary)', color: 'white' }} onClick={handleDownloadImage}>Download JPG</button>
-                            <button className="btn btn-primary" onClick={handlePrint}>Print Badge</button>
-                        </div>
                     </div>
-                </div>
+
+                    {/* Modal / Print Area */}
+                    {showModal && lastVisitor && (
+                        <div className="print-modal-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+                            <div className="print-modal-content" style={{ padding: '0', maxWidth: '400px', width: '90%', border: '1px solid rgba(255,255,255,0.1)', overflow: "hidden" }}>
+                                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Ready to Print</h2>
+                                    <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+                                </div>
+
+                                <div className="print-preview-container" style={{ padding: '2rem', display: 'flex', justifyContent: 'center', background: '#e2e8f0' }}>
+                                    {/* Wrapper for Print Area */}
+                                    <div id="print-area" className="print-area">
+                                        <VisitorBadge visitor={lastVisitor} customLogo={customLogo || undefined} />
+                                    </div>
+                                </div>
+
+                                <div style={{ padding: '1.5rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end', background: 'var(--bg-glass-strong)' }}>
+                                    <button className="btn" style={{ background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-main)' }} onClick={() => setShowModal(false)}>Close</button>
+                                    <button className="btn" style={{ background: 'var(--secondary)', color: 'white' }} onClick={handleDownloadImage}>Download JPG</button>
+                                    <button className="btn btn-primary" onClick={handlePrint}>Print Badge</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );
 };
+
 export default CheckIn;

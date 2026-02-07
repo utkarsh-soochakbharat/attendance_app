@@ -4,38 +4,21 @@ import logo from '../assets/logo.png';
 import AdminVerificationModal from './AdminVerificationModal';
 import '../styles/layout.css';
 
-import { api } from '../utils/api';
-
 const Layout: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const [showAdminModal, setShowAdminModal] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    const changeServerUrl = async () => {
-        const current = api.getCurrentBaseUrl();
-        const newUrl = prompt(`Current URL: ${current}\n\nEnter Server URL (e.g. http://10.0.2.2:3000/api for Emulator):`, current);
-
-        if (newUrl && newUrl !== current) {
-            api.setBaseUrl(newUrl);
-            window.location.reload();
-        } else if (newUrl === current) {
-            // Test connection
-            try {
-                // Remove /api from base URL for health check if needed, or check /api/health
-                const healthUrl = `${current}/health`;
-                alert(`Testing connection to: ${healthUrl}...`);
-
-                const res = await fetch(healthUrl);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-                const data = await res.json();
-                alert(`✅ Connection Successful!\nStatus: ${data.status}\nMessage: ${data.message}`);
-            } catch (err: any) {
-                alert(`❌ Connection Failed!\nError: ${err.message}\n\nTroubleshooting:\n1. Ensure 'npm run server' is running on PC.\n2. Ensure URL is correct (http://10.0.2.2:3000/api for emulator).\n3. Check PC Firewall.`);
-            }
-        }
-    };
+    // Commented out unused function
+    // const changeServerUrl = async () => {
+    //     const current = api.getCurrentBaseUrl();
+    //     const newUrl = prompt(`Current URL: ${current}\n\nEnter Server URL (e.g. http://10.0.2.2:3000/api for Emulator):`, current);
+    //     if (newUrl && newUrl !== current) {
+    //         api.setBaseUrl(newUrl);
+    //         window.location.reload();
+    //     }
+    // };
 
     const handleAdminVerified = () => {
         // Double check authorization logic if needed, but modal handles it.
@@ -125,6 +108,13 @@ const Layout: React.FC = () => {
                         onClick={handleNavClick}
                     >
                         Employee Attendance
+                    </Link>
+                    <Link
+                        to="/attendance-reports"
+                        className={`nav-item ${location.pathname.includes('attendance-reports') ? 'active' : ''}`}
+                        onClick={handleNavClick}
+                    >
+                        Attendance Reports
                     </Link>
                     <div style={{ borderTop: '1px solid var(--border-glass)', margin: '10px 0', opacity: 0.3 }}></div>
                     <Link
