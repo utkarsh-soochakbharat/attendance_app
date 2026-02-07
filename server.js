@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -6,12 +7,32 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs-extra';
 import multer from 'multer';
+import cron from 'node-cron';
+import { sendEmployeeMonthlyReport, sendConsolidatedReport, testEmailConfig } from './emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load env (optional in packaged build)
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+// Simple startup logger so we can see why packaged server exits
+const serverLogPath = path.join(__dirname, 'server-startup-log.txt');
+function log(...args) {
+    try {
+        fs.appendFileSync(
+            serverLogPath,
+            `${new Date().toISOString()} ${args.map(String).join(' ')}\n`
+        );
+    } catch {
+        // ignore logging errors
+    }
+}
+log('server.js starting. __dirname =', __dirname);
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+log('PORT from env:', process.env.PORT, 'Final PORT:', PORT);
 
 // Middleware
 app.use(cors());
@@ -31,12 +52,21 @@ fs.ensureDirSync(facesDir);
 fs.ensureDirSync(photosDir);
 fs.ensureDirSync(voicesDir);
 
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-
-console.log('✅ Database initialized at:', dbPath);
+let db;
+try {
+    log('Initializing database at', dbPath);
+    db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    log('Database initialized OK');
+    console.log('✅ Database initialized at:', dbPath);
+} catch (err) {
+    log('Database init FAILED:', err?.message || err);
+    console.error('Database init failed', err);
+    throw err;
+}
 
 // Create tables
+log('Creating / migrating tables');
 const schema = `
   CREATE TABLE IF NOT EXISTS employees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +133,14 @@ const schema = `
   );
 `;
 
-db.exec(schema);
+try {
+    db.exec(schema);
+    log('Schema created / ensured OK');
+} catch (err) {
+    log('Schema creation FAILED:', err?.message || err);
+    console.error('Schema creation failed', err);
+    throw err;
+}
 
 // Add 'voice_settings' column if it doesn't exist (for existing databases)
 try {
@@ -149,13 +186,30 @@ const uploadVoice = multer({ storage: voiceStorage });
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'dist')));
-app.use('/models', express.static(path.join(__dirname, 'public/models')));
+
+// Resolve correct models directory in both dev and packaged builds
+// - Dev: __dirname is project root → use ./public/models
+// - Packaged: __dirname is .../resources/app.asar.unpacked
+//   extraResources copies public/models → ../models
+let modelsDir = path.join(__dirname, 'public/models');
+if (!fs.existsSync(modelsDir)) {
+    // Fallback for packaged app: one level up (resources/models)
+    modelsDir = path.join(__dirname, '..', 'models');
+}
+log('Models directory:', modelsDir, 'exists:', fs.existsSync(modelsDir));
+app.use('/models', express.static(modelsDir));
+
 app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 app.use('/photos', express.static(photosDir));
 app.use('/voices', express.static(voicesDir)); // Serve voice files
 // ==========================================
 // API ENDPOINTS
 // ==========================================
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // Get all employees
 app.get('/api/employees', (req, res) => {
@@ -351,8 +405,8 @@ app.post('/api/add-visitor', (req, res) => {
         const { name, email, phone, purpose, host_employee, photo } = req.body;
 
         const stmt = db.prepare(`
-            INSERT INTO visitors (name, email, phone, purpose, host_employee, photo)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO visitors (name, email, phone, purpose, host_employee, photo, check_in_time)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
         `);
         const info = stmt.run(name, email, phone, purpose, host_employee, photo);
 
@@ -367,7 +421,7 @@ app.put('/api/checkout-visitor/:id', (req, res) => {
     try {
         const stmt = db.prepare(`
             UPDATE visitors 
-            SET status = 'checked_out', check_out_time = CURRENT_TIMESTAMP 
+            SET status = 'checked_out', check_out_time = datetime('now') 
             WHERE id = ?
         `);
         stmt.run(req.params.id);
@@ -422,11 +476,19 @@ app.put('/api/update-appointment-status', (req, res) => {
 // EMPLOYEE CHECK-IN/OUT
 // ==========================================
 
-// Get today's attendance
+// Get today's attendance (UTC-based)
 app.get('/api/today-attendance', (req, res) => {
     try {
         const records = db.prepare(`
-            SELECT a.*, e.name, e.employee_id
+            SELECT 
+                a.id,
+                a.type,
+                a.timestamp,
+                a.location,
+                a.office_location_id,
+                e.employee_id AS employee_id,
+                e.name,
+                e.department
             FROM attendance a
             JOIN employees e ON a.employee_id = e.id
             WHERE DATE(a.timestamp) = DATE('now')
@@ -449,8 +511,8 @@ app.post('/api/check-in-employee', (req, res) => {
         }
 
         const stmt = db.prepare(`
-            INSERT INTO attendance (employee_id, type, office_location_id)
-            VALUES (?, 'check-in', ?)
+            INSERT INTO attendance (employee_id, type, office_location_id, timestamp)
+            VALUES (?, 'check-in', ?, datetime('now'))
         `);
         stmt.run(employee.id, employee.office_id);
         res.json({ success: true });
@@ -470,8 +532,8 @@ app.post('/api/check-out-employee', (req, res) => {
         }
 
         const stmt = db.prepare(`
-            INSERT INTO attendance (employee_id, type, office_location_id)
-            VALUES (?, 'check-out', ?)
+            INSERT INTO attendance (employee_id, type, office_location_id, timestamp)
+            VALUES (?, 'check-out', ?, datetime('now'))
         `);
         stmt.run(employee.id, employee.office_id);
         res.json({ success: true });
@@ -509,6 +571,312 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'API server is running' });
 });
 
+// ==========================================
+// MONTHLY ATTENDANCE & EMAIL
+// ==========================================
+
+// Get monthly attendance for a specific employee
+app.get('/api/monthly-attendance/:employeeId', (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        const { month, year } = req.query;
+
+        const employee = db.prepare('SELECT * FROM employees WHERE employee_id = ?').get(employeeId);
+        if (!employee) {
+            return res.status(404).json({ success: false, error: 'Employee not found' });
+        }
+
+        // Get attendance for the specified month
+        const records = db.prepare(`
+            SELECT 
+                a.type,
+                a.timestamp,
+                DATE(a.timestamp) as date
+            FROM attendance a
+            WHERE a.employee_id = ?
+            AND strftime('%m', a.timestamp) = ?
+            AND strftime('%Y', a.timestamp) = ?
+            ORDER BY a.timestamp ASC
+        `).all(employee.id, month, year);
+
+        // Group by date
+        const dailyAttendance = {};
+        records.forEach(record => {
+            if (!dailyAttendance[record.date]) {
+                dailyAttendance[record.date] = { check_in: null, check_out: null };
+            }
+            if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) {
+                dailyAttendance[record.date].check_in = record.timestamp;
+            }
+            if (record.type === 'check-out') {
+                dailyAttendance[record.date].check_out = record.timestamp;
+            }
+        });
+
+        res.json({
+            employee: {
+                id: employee.employee_id,
+                name: employee.name,
+                email: employee.email,
+                department: employee.department
+            },
+            attendance: dailyAttendance
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Get all employees monthly attendance (for HR/Founder)
+app.get('/api/all-monthly-attendance', (req, res) => {
+    try {
+        const { month, year } = req.query;
+
+        const employees = db.prepare('SELECT * FROM employees WHERE is_active = 1').all();
+        const allAttendance = [];
+
+        employees.forEach(employee => {
+            const records = db.prepare(`
+                SELECT 
+                    a.type,
+                    a.timestamp,
+                    DATE(a.timestamp) as date
+                FROM attendance a
+                WHERE a.employee_id = ?
+                AND strftime('%m', a.timestamp) = ?
+                AND strftime('%Y', a.timestamp) = ?
+                ORDER BY a.timestamp ASC
+            `).all(employee.id, month, year);
+
+            const dailyAttendance = {};
+            records.forEach(record => {
+                if (!dailyAttendance[record.date]) {
+                    dailyAttendance[record.date] = { check_in: null, check_out: null };
+                }
+                if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) {
+                    dailyAttendance[record.date].check_in = record.timestamp;
+                }
+                if (record.type === 'check-out') {
+                    dailyAttendance[record.date].check_out = record.timestamp;
+                }
+            });
+
+            allAttendance.push({
+                employee: {
+                    id: employee.employee_id,
+                    name: employee.name,
+                    email: employee.email,
+                    department: employee.department
+                },
+                attendance: dailyAttendance
+            });
+        });
+
+        res.json(allAttendance);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Send monthly attendance email
+app.post('/api/send-monthly-attendance', async (req, res) => {
+    try {
+        const { employeeId, month, year, sendToAll } = req.body;
+
+        if (!month || !year) {
+            return res.status(400).json({ success: false, error: 'Month and year are required' });
+        }
+
+        const results = [];
+
+        if (sendToAll) {
+            // Send to all employees
+            const employees = db.prepare('SELECT * FROM employees WHERE is_active = 1').all();
+
+            for (const employee of employees) {
+                // Get attendance data
+                const records = db.prepare(`
+                    SELECT 
+                        a.type,
+                        a.timestamp,
+                        DATE(a.timestamp) as date
+                    FROM attendance a
+                    WHERE a.employee_id = ?
+                    AND strftime('%m', a.timestamp) = ?
+                    AND strftime('%Y', a.timestamp) = ?
+                    ORDER BY a.timestamp ASC
+                `).all(employee.id, month, year);
+
+                // Group by date
+                const dailyAttendance = {};
+                records.forEach(record => {
+                    if (!dailyAttendance[record.date]) {
+                        dailyAttendance[record.date] = { check_in: null, check_out: null };
+                    }
+                    if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) {
+                        dailyAttendance[record.date].check_in = record.timestamp;
+                    }
+                    if (record.type === 'check-out') {
+                        dailyAttendance[record.date].check_out = record.timestamp;
+                    }
+                });
+
+                // Send email
+                const result = await sendEmployeeMonthlyReport(
+                    {
+                        id: employee.employee_id,
+                        name: employee.name,
+                        email: employee.email,
+                        department: employee.department
+                    },
+                    dailyAttendance,
+                    month,
+                    year
+                );
+
+                results.push({
+                    employee: employee.name,
+                    email: employee.email,
+                    ...result
+                });
+            }
+
+            // Send consolidated report to HR/Founder
+            const hrEmployees = employees.filter(e =>
+                e.designation?.toLowerCase().includes('hr') ||
+                e.designation?.toLowerCase().includes('founder')
+            );
+
+            if (hrEmployees.length > 0) {
+                // Get all employees data for consolidated report
+                const allEmployeesData = employees.map(employee => {
+                    const records = db.prepare(`
+                        SELECT 
+                            a.type,
+                            a.timestamp,
+                            DATE(a.timestamp) as date
+                        FROM attendance a
+                        WHERE a.employee_id = ?
+                        AND strftime('%m', a.timestamp) = ?
+                        AND strftime('%Y', a.timestamp) = ?
+                        ORDER BY a.timestamp ASC
+                    `).all(employee.id, month, year);
+
+                    const dailyAttendance = {};
+                    records.forEach(record => {
+                        if (!dailyAttendance[record.date]) {
+                            dailyAttendance[record.date] = { check_in: null, check_out: null };
+                        }
+                        if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) {
+                            dailyAttendance[record.date].check_in = record.timestamp;
+                        }
+                        if (record.type === 'check-out') {
+                            dailyAttendance[record.date].check_out = record.timestamp;
+                        }
+                    });
+
+                    return {
+                        employee: {
+                            id: employee.employee_id,
+                            name: employee.name,
+                            email: employee.email,
+                            department: employee.department
+                        },
+                        attendance: dailyAttendance
+                    };
+                });
+
+                for (const hrEmployee of hrEmployees) {
+                    const result = await sendConsolidatedReport(
+                        {
+                            id: hrEmployee.employee_id,
+                            name: hrEmployee.name,
+                            email: hrEmployee.email,
+                            department: hrEmployee.department
+                        },
+                        allEmployeesData,
+                        month,
+                        year
+                    );
+
+                    results.push({
+                        employee: `${hrEmployee.name} (Consolidated)`,
+                        email: hrEmployee.email,
+                        ...result
+                    });
+                }
+            }
+
+            res.json({
+                success: true,
+                message: `Sent ${results.length} emails`,
+                results: results
+            });
+
+        } else if (employeeId) {
+            // Send to specific employee
+            const employee = db.prepare('SELECT * FROM employees WHERE employee_id = ?').get(employeeId);
+
+            if (!employee) {
+                return res.status(404).json({ success: false, error: 'Employee not found' });
+            }
+
+            // Get attendance data
+            const records = db.prepare(`
+                SELECT 
+                    a.type,
+                    a.timestamp,
+                    DATE(a.timestamp) as date
+                FROM attendance a
+                WHERE a.employee_id = ?
+                AND strftime('%m', a.timestamp) = ?
+                AND strftime('%Y', a.timestamp) = ?
+                ORDER BY a.timestamp ASC
+            `).all(employee.id, month, year);
+
+            // Group by date
+            const dailyAttendance = {};
+            records.forEach(record => {
+                if (!dailyAttendance[record.date]) {
+                    dailyAttendance[record.date] = { check_in: null, check_out: null };
+                }
+                if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) {
+                    dailyAttendance[record.date].check_in = record.timestamp;
+                }
+                if (record.type === 'check-out') {
+                    dailyAttendance[record.date].check_out = record.timestamp;
+                }
+            });
+
+            // Send email
+            const result = await sendEmployeeMonthlyReport(
+                {
+                    id: employee.employee_id,
+                    name: employee.name,
+                    email: employee.email,
+                    department: employee.department
+                },
+                dailyAttendance,
+                month,
+                year
+            );
+
+            res.json({
+                success: result.success,
+                message: result.success ? 'Email sent successfully' : 'Failed to send email',
+                error: result.error
+            });
+
+        } else {
+            res.status(400).json({ success: false, error: 'Either employeeId or sendToAll must be specified' });
+        }
+
+    } catch (error) {
+        console.error('Error sending monthly attendance:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Catch‑all route for SPA support
 app.use((req, res) => {
     const indexPath = path.join(__dirname, 'dist', 'index.html');
@@ -520,10 +888,12 @@ app.use((req, res) => {
     }
 });
 
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 API Server running on http://localhost:${PORT}`);
-    console.log(`📊 Database: ${dbPath}`);
+// Start server with error handling
+try {
+    app.listen(PORT, '0.0.0.0', async () => {
+        log('✅ Server started successfully on port', PORT);
+        console.log(`🚀 API Server running on http://localhost:${PORT}`);
+        console.log(`Database: ${dbPath}`);
     console.log(`\n📡 Available endpoints:`);
     console.log(`   GET  /api/health`);
     console.log(`   GET  /api/employees`);
@@ -536,6 +906,119 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`   DELETE /api/delete-office-location/:id`);
     console.log(`   GET  /api/visitors`);
     console.log(`   POST /api/add-visitor`);
-});
+    console.log(`   POST /api/send-monthly-attendance`);
+    console.log(``);
+
+    // Test email configuration on startup
+    try {
+        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+            await testEmailConfig();
+            console.log(`📧 Email service configured and ready`);
+        } else {
+            console.log(`⚠️  Email service not configured (set EMAIL_USER and EMAIL_PASS)`);
+        }
+    } catch (error) {
+        console.log(`⚠️  Email configuration error: ${error.message}`);
+    }
+
+    // Setup automated monthly attendance email scheduler
+    // Runs at 11:59 PM on days 28-31 of every month
+    // Only sends if tomorrow is the 1st (meaning today is the last day of the month)
+    cron.schedule('59 23 28-31 * *', async () => {
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Only run if tomorrow is the 1st (meaning today is last day of month)
+        if (tomorrow.getDate() === 1) {
+            console.log('📧 Starting automated monthly attendance email send...');
+
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const year = String(today.getFullYear());
+
+            try {
+                // Send to all employees
+                const employees = db.prepare('SELECT * FROM employees WHERE is_active = 1').all();
+                let successCount = 0;
+                let failCount = 0;
+
+                for (const employee of employees) {
+                    const records = db.prepare(`
+                        SELECT a.type, a.timestamp, DATE(a.timestamp) as date
+                        FROM attendance a
+                        WHERE a.employee_id = ?
+                        AND strftime('%m', a.timestamp) = ?
+                        AND strftime('%Y', a.timestamp) = ?
+                        ORDER BY a.timestamp ASC
+                    `).all(employee.id, month, year);
+
+                    const dailyAttendance = {};
+                    records.forEach(record => {
+                        if (!dailyAttendance[record.date]) {
+                            dailyAttendance[record.date] = { check_in: null, check_out: null };
+                        }
+                        if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) {
+                            dailyAttendance[record.date].check_in = record.timestamp;
+                        }
+                        if (record.type === 'check-out') {
+                            dailyAttendance[record.date].check_out = record.timestamp;
+                        }
+                    });
+
+                    const result = await sendEmployeeMonthlyReport(
+                        { id: employee.employee_id, name: employee.name, email: employee.email, department: employee.department },
+                        dailyAttendance, month, year
+                    );
+                    if (result.success) successCount++; else failCount++;
+                }
+
+                // Send consolidated to HR/Founder
+                const hrEmployees = employees.filter(e =>
+                    e.designation?.toLowerCase().includes('hr') || e.designation?.toLowerCase().includes('founder')
+                );
+
+                if (hrEmployees.length > 0) {
+                    const allEmployeesData = employees.map(employee => {
+                        const records = db.prepare(`
+                            SELECT a.type, a.timestamp, DATE(a.timestamp) as date
+                            FROM attendance a WHERE a.employee_id = ?
+                            AND strftime('%m', a.timestamp) = ? AND strftime('%Y', a.timestamp) = ?
+                        `).all(employee.id, month, year);
+                        const dailyAttendance = {};
+                        records.forEach(record => {
+                            if (!dailyAttendance[record.date]) dailyAttendance[record.date] = { check_in: null, check_out: null };
+                            if (record.type === 'check-in' && !dailyAttendance[record.date].check_in) dailyAttendance[record.date].check_in = record.timestamp;
+                            if (record.type === 'check-out') dailyAttendance[record.date].check_out = record.timestamp;
+                        });
+                        return { employee: { id: employee.employee_id, name: employee.name, email: employee.email, department: employee.department }, attendance: dailyAttendance };
+                    });
+
+                    for (const hrEmployee of hrEmployees) {
+                        const result = await sendConsolidatedReport(
+                            { id: hrEmployee.employee_id, name: hrEmployee.name, email: hrEmployee.email, department: hrEmployee.department },
+                            allEmployeesData, month, year
+                        );
+                        if (result.success) successCount++; else failCount++;
+                    }
+                }
+
+                console.log(`✅ Monthly emails sent! Success: ${successCount}, Failed: ${failCount}`);
+            } catch (error) {
+                console.error('❌ Error in automated monthly email:', error);
+            }
+        }
+    }, { timezone: "Asia/Kolkata" });
+
+    console.log(`⏰ Automated monthly email scheduler activated (IST timezone)`);
+    }).on('error', (err) => {
+        log('❌ Server failed to start:', err.message || err);
+        console.error('❌ Server failed to start:', err);
+        process.exit(1);
+    });
+} catch (error) {
+    log('❌ Fatal error starting server:', error.message || error);
+    console.error('❌ Fatal error starting server:', error);
+    process.exit(1);
+}
 
 export default app;

@@ -1,38 +1,41 @@
 // API client that works in both Electron, Browser, and Capacitor
 
 const isElectron = () => {
-    return typeof window !== 'undefined' && window.ipcRenderer !== undefined;
+    // Method 1: Check for ipcRenderer (most reliable)
+    if (typeof window !== 'undefined' && window.ipcRenderer !== undefined) {
+        return true;
+    }
+    // Method 2: Check for file:// protocol (packaged Electron)
+    if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+        return true;
+    }
+    // Method 3: Check user agent
+    if (typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron')) {
+        return true;
+    }
+    return false;
 };
 
 const isCapacitor = () => {
     return typeof window !== 'undefined' &&
-        (window.Capacitor !== undefined ||
-            (window as any).Capacitor !== undefined ||
+        ((window as any).Capacitor !== undefined ||
             // Check for Capacitor user agent or platform
             navigator.userAgent.includes('Capacitor'));
 };
 
 const getBaseUrl = () => {
-    // Check if API URL is configured (allows override)
-    const storedUrl = localStorage.getItem('API_URL');
-    if (storedUrl) {
-        return storedUrl;
-    }
-
-    // Production Cloud URL (Fly.io)
     const PROD_URL = 'https://attendance-app-v5jdla.fly.dev/api';
 
-    // For Capacitor mobile apps, use Cloud URL
-    if (isCapacitor()) {
-        return PROD_URL;
+    // ✅ LOCAL DEV → ALWAYS localhost
+    if (import.meta.env.DEV) {
+        return 'http://localhost:3001/api';
     }
 
-    // For Electron desktop, use IPC (local database)
-    if (isElectron()) {
-        return null;
-    }
+    // ✅ PROD → allow override (Capacitor / custom)
+    const storedUrl = localStorage.getItem('API_URL');
+    if (storedUrl) return storedUrl;
 
-    // For Web Browser (Admin Dashboard), also use Cloud URL so you see the same data!
+    // ✅ PROD → Use Fly.io (works for both Electron and Browser)
     return PROD_URL;
 };
 
@@ -65,7 +68,7 @@ const apiCall = async (endpoint: string, options: RequestInit = {}) => {
                 `1. Make sure the server is running on your PC (npm run server)\n` +
                 `2. Find your PC's IP address (run 'ipconfig' on Windows)\n` +
                 `3. Configure the API URL in the app settings\n` +
-                `   Example: api.setBaseUrl('http://192.168.1.100:3000')`
+                `   Example: api.setBaseUrl('http://192.168.1.100:3001')`
             );
         }
         throw error;

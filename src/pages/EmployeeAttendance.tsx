@@ -1,11 +1,125 @@
 import { useState, useRef, useEffect } from 'react';
 import * as faceapi from 'face-api.js';
+import Lottie from 'lottie-react';
 import api from '../utils/api';
 import AdminVerificationModal from '../components/AdminVerificationModal';
+import { getModelUrl, waitForServer } from '../utils/modelLoader';
+import likeAnimation from '../assets/like.json';
+import logoutAnimation from '../assets/logout.json';
+
+const AttendancePopup = ({ type, visible }: { type: 'late' | 'in' | 'out' | null, visible: boolean }) => {
+    if (!visible || !type) return null;
+
+    const getAnimation = () => {
+        if (type === 'late') {
+            // For late, use emoji since we don't have a Lottie file for it
+            return (
+                <div style={{
+                    fontSize: '120px',
+                    animation: 'fadeInScale 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                    transformOrigin: 'center',
+                    display: 'inline-block'
+                }}>
+                    😭🙏🏼💔
+                </div>
+            );
+        }
+        if (type === 'in') {
+            return (
+                <div style={{ width: '200px', height: '200px', margin: '0 auto' }}>
+                    <Lottie
+                        animationData={likeAnimation}
+                        loop={false}
+                        autoplay={true}
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                </div>
+            );
+        }
+        if (type === 'out') {
+            return (
+                <div style={{ width: '200px', height: '200px', margin: '0 auto' }}>
+                    <Lottie
+                        animationData={logoutAnimation}
+                        loop={false}
+                        autoplay={true}
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                </div>
+            );
+        }
+        return null;
+    };
+
+    const getMessage = () => {
+        if (type === 'late') return 'You are Late!';
+        if (type === 'in') return 'Checked In!';
+        if (type === 'out') return 'Bye Bye!';
+        return '';
+    };
+
+    return (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.9)', zIndex: 10000,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(10px)'
+        }}>
+            <div style={{
+                marginBottom: '30px',
+                animation: 'fadeInScale 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                transformOrigin: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+            }}>
+                {getAnimation()}
+            </div>
+            <div style={{
+                color: 'white',
+                fontSize: '36px',
+                fontWeight: 'bold',
+                animation: 'slideUp 0.6s ease-out 0.2s both',
+                textShadow: '0 4px 20px rgba(0,0,0,0.8)',
+                textAlign: 'center'
+            }}>
+                {getMessage()}
+            </div>
+            <style>{`
+                @keyframes fadeInScale {
+                    0% { 
+                        opacity: 0; 
+                        transform: scale(0.3) rotate(-10deg); 
+                    }
+                    50% {
+                        transform: scale(1.1) rotate(5deg);
+                    }
+                    100% { 
+                        opacity: 1; 
+                        transform: scale(1) rotate(0deg); 
+                    }
+                }
+                @keyframes slideUp {
+                    0% { 
+                        opacity: 0; 
+                        transform: translateY(30px); 
+                    }
+                    100% { 
+                        opacity: 1; 
+                        transform: translateY(0); 
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
 
 const EmployeeAttendance = () => {
     const [employees, setEmployees] = useState<any[]>([]);
     const [todayAttendance, setTodayAttendance] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<'scan' | 'list'>('scan');
+    const [popupState, setPopupState] = useState<{ visible: boolean, type: 'late' | 'in' | 'out' | null }>({ visible: false, type: null });
+
     // Admin Verification
     const [showAdminModal, setShowAdminModal] = useState(false);
 
@@ -152,7 +266,20 @@ const EmployeeAttendance = () => {
 
     const loadModels = async () => {
         try {
-            const MODEL_URL = '/models';
+            const MODEL_URL = getModelUrl();
+            console.log('Loading models from:', MODEL_URL);
+            
+            // Wait for server to be ready if using HTTP (packaged Electron)
+            if (MODEL_URL.startsWith('http://')) {
+                console.log('Waiting for backend server to be ready...');
+                const serverReady = await waitForServer(15, 1000); // 15 retries, 1 second apart
+                if (!serverReady) {
+                    console.error('Backend server did not become ready. Models may fail to load.');
+                } else {
+                    console.log('Backend server is ready');
+                }
+            }
+            
             await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
             await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
             await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
@@ -177,8 +304,59 @@ const EmployeeAttendance = () => {
 
     const loadTodayAttendance = async () => {
         try {
-            const data = await api.getTodayAttendance();
-            setTodayAttendance(data);
+            const rawData = await api.getTodayAttendance();
+            console.log('Raw attendance data:', rawData);
+
+            // Process raw events into a summary: { employee_id, check_in_time, check_out_time, ... }
+            const summary: any = {};
+
+            rawData.forEach((record: any) => {
+                const empId = record.employee_id_text || record.employee_id || record.employeeId;
+                if (!empId) return;
+
+                const key = String(empId);
+
+                if (!summary[key]) {
+                    summary[key] = {
+                        employee_id: empId,
+                        name: record.name || 'Unknown',
+                        department: record.department || null,
+                        check_in_time: null,
+                        check_out_time: null,
+                        date:
+                            record.date ||
+                            (record.timestamp
+                                ? record.timestamp.slice(0, 10)
+                                : new Date().toISOString().split('T')[0]),
+                    };
+                }
+
+                if (record.type === 'check-in' && record.timestamp) {
+                    if (
+                        !summary[key].check_in_time ||
+                        new Date(record.timestamp) < new Date(summary[key].check_in_time)
+                    ) {
+                        summary[key].check_in_time = record.timestamp;
+                    }
+                }
+
+                if (record.type === 'check-out' && record.timestamp) {
+                    if (
+                        !summary[key].check_out_time ||
+                        new Date(record.timestamp) > new Date(summary[key].check_out_time)
+                    ) {
+                        summary[key].check_out_time = record.timestamp;
+                    }
+                }
+
+                if (!record.type) {
+                    summary[key].check_in_time ||= record.check_in_time;
+                    summary[key].check_out_time ||= record.check_out_time;
+                }
+            });
+
+            setTodayAttendance([...Object.values(summary)]);
+
         } catch (error) {
             console.error('Failed to load attendance:', error);
         }
@@ -304,8 +482,6 @@ const EmployeeAttendance = () => {
         if (audioPath) {
             // Play uploaded audio
             // Construct full URL
-            const baseUrl = api.getCurrentBaseUrl()?.replace('/api', '');
-
             const apiBase = api.getCurrentBaseUrl() || '';
             const rootBase = apiBase.replace(/\/api$/, '');
             const soundUrl = `${rootBase}${audioPath}`;
@@ -336,44 +512,45 @@ const EmployeeAttendance = () => {
             let assignedOffice = null;
             let isLate = false;
 
+            // Check office hours and late status
             if (employee && employee.office_id) {
                 const offices = await api.getOfficeLocations();
                 assignedOffice = offices.find((o: any) => o.id === employee.office_id);
+            }
 
-                if (assignedOffice && assignedOffice.start_time && assignedOffice.end_time) {
-                    const now = new Date();
-                    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            // Use assigned office or default office hours (09:00)
+            const officeToCheck = assignedOffice || { start_time: '09:00', end_time: '20:00' };
 
-                    // Logic:
-                    // blocked if AFTER end_time.
-                    // blocked if BEFORE start_time - 2 hours (Too early).
+            if (officeToCheck.start_time && officeToCheck.end_time && actionType === 'check-in') {
+                const now = new Date();
+                const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-                    // Parse times to compare easily
-                    const [startH, startM] = assignedOffice.start_time.split(':').map(Number);
-                    const [endH, endM] = assignedOffice.end_time.split(':').map(Number);
-                    const [curH, curM] = currentTime.split(':').map(Number);
+                // Parse times to compare easily
+                const [startH, startM] = officeToCheck.start_time.split(':').map(Number);
+                const [endH, endM] = officeToCheck.end_time.split(':').map(Number);
+                const [curH, curM] = currentTime.split(':').map(Number);
 
-                    const startMinutes = startH * 60 + startM;
-                    const endMinutes = endH * 60 + endM;
-                    const curMinutes = curH * 60 + curM;
+                const startMinutes = startH * 60 + startM;
+                const endMinutes = endH * 60 + endM;
+                const curMinutes = curH * 60 + curM;
 
-                    // Allow check-in 2 hours before start time
-                    if (curMinutes < (startMinutes - 120)) {
-                        alert(`Too early to mark attendance. Office starts at ${assignedOffice.start_time}`);
-                        stopCamera();
-                        return;
-                    }
+                // Allow check-in 2 hours before start time
+                if (curMinutes < (startMinutes - 120)) {
+                    alert(`Too early to mark attendance. Office starts at ${officeToCheck.start_time}`);
+                    stopCamera();
+                    return;
+                }
 
-                    if (curMinutes > endMinutes) {
-                        alert(`Office closed. Cannot mark attendance after ${assignedOffice.end_time}`);
-                        stopCamera();
-                        return;
-                    }
+                if (curMinutes > endMinutes) {
+                    alert(`Office closed. Cannot mark attendance after ${officeToCheck.end_time}`);
+                    stopCamera();
+                    return;
+                }
 
-                    // Check if Late
-                    if (curMinutes > startMinutes) {
-                        isLate = true;
-                    }
+                // Check if Late - current time is after start time
+                if (curMinutes > startMinutes) {
+                    isLate = true;
+                    console.log(`Late check-in detected: Current time ${currentTime} is after start time ${officeToCheck.start_time}`);
                 }
             }
 
@@ -385,6 +562,18 @@ const EmployeeAttendance = () => {
             }
 
             if (res.success) {
+                // Trigger Visual Popup - ensure late check-in shows correctly
+                if (actionType === 'check-in') {
+                    // Debug: log late status
+                    console.log('Check-in successful. Is late:', isLate);
+                    setPopupState({ visible: true, type: isLate ? 'late' : 'in' });
+                } else {
+                    setPopupState({ visible: true, type: 'out' });
+                }
+
+                // Hide popup after 3 seconds (longer for animations)
+                setTimeout(() => setPopupState(prev => ({ ...prev, visible: false })), 3000);
+
                 // Play Voice Feedback (Non-blocking)
                 // Use assignedOffice settings if available, otherwise use defaults
                 const settingsToUse = assignedOffice || {
@@ -398,17 +587,19 @@ const EmployeeAttendance = () => {
                 if (actionType === 'check-in') {
                     if (isLate) {
                         playVoiceFeedback('late', settingsToUse);
-                        setTimeout(() => alert(`Check-in successful! (LATE)`), 500);
                     } else {
                         playVoiceFeedback('on_time', settingsToUse);
-                        setTimeout(() => alert(`Check-in successful! 👍`), 500);
                     }
                 } else {
                     playVoiceFeedback('check_out', settingsToUse);
-                    setTimeout(() => alert(`Check-out successful!`), 500);
                 }
 
+                // Force refresh attendance data
                 await loadTodayAttendance();
+                // Small delay to ensure data is updated
+                setTimeout(() => {
+                    loadTodayAttendance();
+                }, 500);
                 stopCamera();
             } else {
                 alert('Error: ' + res.error);
@@ -419,51 +610,84 @@ const EmployeeAttendance = () => {
         }
     };
 
-    const formatTime = (datetime: string) => {
+    const formatTime = (datetime: string | null) => {
         if (!datetime) return '-';
-        return new Date(datetime).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        try {
+            // Force treat backend value as UTC and let browser convert to local
+            const iso = datetime.endsWith('Z') ? datetime : `${datetime}Z`;
+            const date = new Date(iso);
+
+            if (isNaN(date.getTime())) {
+                console.warn('Invalid date:', datetime);
+                return '-';
+            }
+
+            return date.toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (error) {
+            console.error('Error formatting time:', datetime, error);
+            return '-';
+        }
     };
 
     const downloadAttendance = () => {
-        const csv = [
-            ['Employee ID', 'Name', 'Department', 'Check-In', 'Check-Out', 'Date'].join(','),
-            ...todayAttendance.map(record => [
-                record.employee_id,
-                record.name,
-                record.department || '',
-                formatTime(record.check_in_time),
-                formatTime(record.check_out_time),
-                record.date
-            ].join(','))
-        ].join('\n');
+        // Group attendance by employee for better formatting
+        const csvRows: string[] = [];
 
-        const blob = new Blob([csv], { type: 'text/csv' });
+        // Add header
+        csvRows.push('ATTENDANCE REPORT');
+        csvRows.push(`Date: ${new Date().toLocaleDateString()}`);
+        csvRows.push(''); // Empty line
+
+        // Sort by employee name for consistent ordering
+        const sortedAttendance = [...todayAttendance].sort((a, b) =>
+            (a.name || '').localeCompare(b.name || '')
+        );
+
+        // Add each employee's attendance in a grouped format
+        sortedAttendance.forEach((record, index) => {
+            csvRows.push(`Employee: ${record.name}`);
+            csvRows.push(`Employee ID: ${record.employee_id}`);
+            csvRows.push(`Department: ${record.department || 'N/A'}`);
+            csvRows.push(`Check-In: ${formatTime(record.check_in_time)}`);
+            csvRows.push(`Check-Out: ${formatTime(record.check_out_time)}`);
+            csvRows.push(`Date: ${record.date}`);
+
+            // Add separator between employees (except for last one)
+            if (index < sortedAttendance.length - 1) {
+                csvRows.push(''); // Empty line between employees
+                csvRows.push('---'); // Visual separator
+                csvRows.push(''); // Empty line
+            }
+        });
+
+        const csv = csvRows.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `attendance_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
+        window.URL.revokeObjectURL(url);
     };
 
+    // Mobile detection
+    const isMobile = window.innerWidth < 768;
+
     return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: isMobile ? '0.5rem' : '0' }}>
+            <AttendancePopup type={popupState.type} visible={popupState.visible} />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                     <h1>Employee Attendance</h1>
                     <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
                         Face recognition-based attendance tracking
                     </p>
                 </div>
-                <button
-                    className="btn btn-primary"
-                    onClick={downloadAttendance}
-                    disabled={todayAttendance.length === 0}
-                >
-                    Download Today's Attendance
-                </button>
             </div>
 
             {/* Location Status Banner with Calibration */}
@@ -571,147 +795,144 @@ const EmployeeAttendance = () => {
                 </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '2rem' }}>
-                <div style={{ flex: '0 0 350px' }}>
-                    <h2>Face Recognition</h2>
-                    <div className="card" style={{ padding: '20px' }}>
-                        {!isCameraOpen ? (
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{
-                                    width: '100%',
-                                    aspectRatio: '4/3',
-                                    background: 'rgba(255,255,255,0.05)',
-                                    borderRadius: '8px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    marginBottom: '15px',
-                                    color: 'var(--text-muted)',
-                                    fontSize: '14px'
-                                }}>
-                                    Ready for face recognition
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                    <button
-                                        className="btn btn-primary"
-                                        onClick={() => startCamera('check-in')}
-                                        disabled={!modelsLoaded}
-                                        style={{ width: '100%' }}
-                                    >
-                                        ✓ Check In
-                                    </button>
-                                    <button
-                                        className="btn"
-                                        onClick={() => startCamera('check-out')}
-                                        disabled={!modelsLoaded}
-                                        style={{ width: '100%', background: 'var(--danger)', color: 'white' }}
-                                    >
-                                        ✕ Check Out
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <div style={{ position: 'relative', marginBottom: '15px' }}>
-                                    <video
-                                        ref={videoRef}
-                                        autoPlay
-                                        playsInline
-                                        style={{
-                                            width: '100%',
-                                            borderRadius: '8px',
-                                            backgroundColor: 'black'
-                                        }}
-                                    />
-                                    {matchedEmployee && (
-                                        <div style={{
-                                            position: 'absolute',
-                                            bottom: '10px',
-                                            left: '10px',
-                                            right: '10px',
-                                            background: 'rgba(34, 197, 94, 0.95)',
-                                            color: 'white',
-                                            padding: '10px',
-                                            borderRadius: '8px',
-                                            fontSize: '12px'
-                                        }}>
-                                            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{matchedEmployee.name}</div>
-                                            <div style={{ fontSize: '11px' }}>{matchedEmployee.employee_id}</div>
-                                        </div>
-                                    )}
-                                </div>
-                                <canvas ref={canvasRef} style={{ display: 'none' }} />
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <button
-                                        className="btn btn-primary"
-                                        onClick={recognizeFace}
-                                        disabled={isProcessing}
-                                        style={{ width: '100%', fontSize: '13px', padding: '10px' }}
-                                    >
-                                        {isProcessing ? 'Recognizing...' : `Scan for ${actionType === 'check-in' ? 'Check-In' : 'Check-Out'}`}
-                                    </button>
-                                    <button
-                                        className="btn"
-                                        onClick={stopCamera}
-                                        style={{ width: '100%', background: 'var(--danger)', color: 'white', fontSize: '13px', padding: '10px' }}
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+            {/* Mobile Tabs */}
+            {isMobile && (
+                <div style={{
+                    display: 'flex',
+                    gap: '0.5rem',
+                    marginBottom: '1.5rem',
+                    background: 'rgba(255,255,255,0.05)',
+                    padding: '0.5rem',
+                    borderRadius: '8px'
+                }}>
+                    <button
+                        onClick={() => setActiveTab('scan')}
+                        className="btn"
+                        style={{
+                            flex: 1,
+                            background: activeTab === 'scan' ? 'var(--primary)' : 'transparent',
+                            color: activeTab === 'scan' ? 'white' : 'var(--text-main)',
+                            border: activeTab === 'scan' ? 'none' : '1px solid var(--border-glass)'
+                        }}
+                    >
+                        📷 Scan Face
+                    </button>
                 </div>
+            )}
 
-                <div style={{ flex: 1 }}>
-                    <h2>Today's Attendance</h2>
-                    <div className="card" style={{ padding: '0', maxHeight: '600px', overflow: 'auto' }}>
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Employee</th>
-                                    <th>Department</th>
-                                    <th>Check-In</th>
-                                    <th>Check-Out</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {todayAttendance.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                                            No attendance records for today
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    todayAttendance.map((record) => (
-                                        <tr key={record.id}>
-                                            <td>
-                                                <div style={{ fontWeight: 'bold' }}>{record.name}</div>
-                                                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{record.employee_id}</div>
-                                            </td>
-                                            <td>{record.department || '-'}</td>
-                                            <td>{formatTime(record.check_in_time)}</td>
-                                            <td>{formatTime(record.check_out_time)}</td>
-                                            <td>
-                                                <span style={{
-                                                    padding: '4px 8px',
-                                                    borderRadius: '4px',
-                                                    fontSize: '12px',
-                                                    fontWeight: 'bold',
-                                                    background: record.check_out_time ? '#94a3b8' : '#22c55e',
-                                                    color: 'white'
-                                                }}>
-                                                    {record.check_out_time ? 'Checked Out' : 'In Office'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+            <div style={{ display: 'flex', gap: '2rem', flexDirection: isMobile && activeTab === 'list' ? 'column' : isMobile ? 'column' : 'row', justifyContent: 'center' }}>
+                {(activeTab === 'scan' || !isMobile) && (
+                    <div style={{ flex: isMobile ? '1' : '1', width: isMobile ? '100%' : 'auto', maxWidth: '600px' }}>
+                        <h2>Face Recognition</h2>
+                        <div className="card" style={{ padding: '20px' }}>
+                            {!isCameraOpen ? (
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{
+                                        width: '100%',
+                                        aspectRatio: '4/3',
+                                        background: 'rgba(255,255,255,0.05)',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginBottom: '15px',
+                                        color: 'var(--text-muted)',
+                                        fontSize: '14px'
+                                    }}>
+                                        Ready for face recognition
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={() => startCamera('check-in')}
+                                            disabled={!modelsLoaded}
+                                            style={{
+                                                width: '100%',
+                                                padding: '20px 30px',
+                                                fontSize: '18px',
+                                                fontWeight: '700',
+                                                borderRadius: '12px',
+                                                boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
+                                                transition: 'all 0.3s ease'
+                                            }}
+                                        >
+                                            ✓ Check In
+                                        </button>
+                                        <button
+                                            className="btn"
+                                            onClick={() => startCamera('check-out')}
+                                            disabled={!modelsLoaded}
+                                            style={{
+                                                width: '100%',
+                                                background: 'var(--danger)',
+                                                color: 'white',
+                                                padding: '20px 30px',
+                                                fontSize: '18px',
+                                                fontWeight: '700',
+                                                borderRadius: '12px',
+                                                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)',
+                                                transition: 'all 0.3s ease'
+                                            }}
+                                        >
+                                            ✕ Check Out
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div style={{ position: 'relative', marginBottom: '15px' }}>
+                                        <video
+                                            ref={videoRef}
+                                            autoPlay
+                                            playsInline
+                                            style={{
+                                                width: '100%',
+                                                borderRadius: '8px',
+                                                backgroundColor: 'black'
+                                            }}
+                                        />
+                                        {matchedEmployee && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: '10px',
+                                                left: '10px',
+                                                right: '10px',
+                                                background: 'rgba(34, 197, 94, 0.95)',
+                                                color: 'white',
+                                                padding: '10px',
+                                                borderRadius: '8px',
+                                                fontSize: '12px'
+                                            }}>
+                                                <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{matchedEmployee.name}</div>
+                                                <div style={{ fontSize: '11px' }}>{matchedEmployee.employee_id}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <canvas ref={canvasRef} style={{ display: 'none' }} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={recognizeFace}
+                                            disabled={isProcessing}
+                                            style={{ width: '100%', fontSize: '13px', padding: '10px' }}
+                                        >
+                                            {isProcessing ? 'Recognizing...' : `Scan for ${actionType === 'check-in' ? 'Check-In' : 'Check-Out'}`}
+                                        </button>
+                                        <button
+                                            className="btn"
+                                            onClick={stopCamera}
+                                            style={{ width: '100%', background: 'var(--danger)', color: 'white', fontSize: '13px', padding: '10px' }}
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
+
+
             </div>
         </div >
     );

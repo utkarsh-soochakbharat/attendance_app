@@ -1,14 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as faceapi from 'face-api.js';
 import api from '../utils/api';
+import { getModelUrl } from '../utils/modelLoader';
 
 interface AdminVerificationModalProps {
     isOpen: boolean;
     onClose: () => void;
     onVerified: (employee: any) => void;
 }
-
-const MODEL_URL = '/models'; // Ensure this path is correct based on your setup
 
 const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({ isOpen, onClose, onVerified }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -35,6 +34,7 @@ const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({ isOpen,
             setEmployees(empData);
 
             // Load Models
+            const MODEL_URL = getModelUrl();
             await Promise.all([
                 faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
                 faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),

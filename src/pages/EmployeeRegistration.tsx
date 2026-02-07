@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as faceapi from 'face-api.js';
 import api from '../utils/api';
+import { getModelUrl } from '../utils/modelLoader';
+import FaceAuthModal from '../components/FaceAuthModal';
 
 const EmployeeRegistration = () => {
     const [form, setForm] = useState({
@@ -23,6 +26,10 @@ const EmployeeRegistration = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
+    const navigate = useNavigate();
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [showAuthModal, setShowAuthModal] = useState(true);
+    const [authenticatedUser, setAuthenticatedUser] = useState<any>(null);
 
     useEffect(() => {
         loadModels();
@@ -45,7 +52,7 @@ const EmployeeRegistration = () => {
 
     const loadModels = async () => {
         try {
-            const MODEL_URL = '/models';
+            const MODEL_URL = getModelUrl();
             await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
             await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
             await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
