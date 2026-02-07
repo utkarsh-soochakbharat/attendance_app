@@ -18,6 +18,9 @@ COPY package*.json ./
 # This ensures better-sqlite3 is compiled for Linux, not Windows
 RUN npm install
 
+# Force rebuild better-sqlite3 for the correct Node.js version and platform
+RUN npm rebuild better-sqlite3 --build-from-source
+
 # Explicitly install Rollup native binary (fixes npm optional dependencies bug)
 RUN npm install @rollup/rollup-linux-x64-gnu --save-optional || true
 
