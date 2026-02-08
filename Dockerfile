@@ -40,6 +40,7 @@ EXPOSE 3001
 # Set environment variable for database path
 ENV DATABASE_PATH=/app/data/ovms.db
 ENV NODE_ENV=production
+ENV TZ=Asia/Kolkata
 
 # Start server
 CMD ["node", "server.js"]

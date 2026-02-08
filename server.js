@@ -10,6 +10,9 @@ import multer from 'multer';
 import cron from 'node-cron';
 import { sendEmployeeMonthlyReport, sendConsolidatedReport, testEmailConfig } from './emailService.js';
 
+// Set timezone to IST (Indian Standard Time)
+process.env.TZ = 'Asia/Kolkata';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

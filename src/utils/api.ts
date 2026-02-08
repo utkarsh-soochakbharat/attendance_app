@@ -91,16 +91,10 @@ export const api = {
     // Employees
     // Employees
     getEmployees: async () => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('get-employees');
-        }
         return apiCall('/employees');
     },
 
     registerEmployee: async (data: any) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('register-employee', data);
-        }
         return apiCall('/register-employee', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -109,16 +103,10 @@ export const api = {
 
     // Attendance
     getAttendance: async () => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('get-attendance');
-        }
         return apiCall('/attendance');
     },
 
     markAttendance: async (data: any) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('mark-attendance', data);
-        }
         return apiCall('/mark-attendance', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -127,16 +115,10 @@ export const api = {
 
     // Office Locations
     getOfficeLocations: async () => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('get-office-locations');
-        }
         return apiCall('/office-locations');
     },
 
     addOfficeLocation: async (data: any) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('add-office-location', data);
-        }
         return apiCall('/add-office-location', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -144,9 +126,6 @@ export const api = {
     },
 
     updateOfficeLocation: async (data: any) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('update-office-location', data);
-        }
         return apiCall('/update-office-location', {
             method: 'PUT',
             body: JSON.stringify(data),
@@ -154,9 +133,6 @@ export const api = {
     },
 
     deleteOfficeLocation: async (id: number) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('delete-office-location', id);
-        }
         return apiCall(`/delete-office-location/${id}`, {
             method: 'DELETE',
         });
@@ -164,16 +140,10 @@ export const api = {
 
     // Visitors
     getVisitors: async () => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('get-visitors');
-        }
         return apiCall('/visitors');
     },
 
     addVisitor: async (data: any) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('add-visitor', data);
-        }
         return apiCall('/add-visitor', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -181,9 +151,6 @@ export const api = {
     },
 
     checkoutVisitor: async (id: number) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('checkout-visitor', id);
-        }
         return apiCall(`/checkout-visitor/${id}`, {
             method: 'PUT',
         });
@@ -191,16 +158,10 @@ export const api = {
 
     // Appointments
     getAppointments: async () => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('get-appointments');
-        }
         return apiCall('/appointments');
     },
 
     addAppointment: async (data: any) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('add-appointment', data);
-        }
         return apiCall('/add-appointment', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -209,17 +170,11 @@ export const api = {
 
     // Dashboard Stats
     getDashboardStats: async () => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('get-dashboard-stats');
-        }
         return apiCall('/dashboard-stats');
     },
 
     // Additional Appointment Methods
     updateAppointmentStatus: async (data: { id: number; status: string }) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('update-appointment-status', data);
-        }
         return apiCall('/update-appointment-status', {
             method: 'PUT',
             body: JSON.stringify(data),
@@ -228,16 +183,10 @@ export const api = {
 
     // Additional Attendance Methods
     getTodayAttendance: async () => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('get-today-attendance');
-        }
         return apiCall('/today-attendance');
     },
 
     checkInEmployee: async (employeeId: string) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('check-in-employee', employeeId);
-        }
         return apiCall('/check-in-employee', {
             method: 'POST',
             body: JSON.stringify({ employeeId }),
@@ -245,9 +194,6 @@ export const api = {
     },
 
     checkOutEmployee: async (employeeId: string) => {
-        if (isElectron()) {
-            return window.ipcRenderer.invoke('check-out-employee', employeeId);
-        }
         return apiCall('/check-out-employee', {
             method: 'POST',
             body: JSON.stringify({ employeeId }),
@@ -255,15 +201,10 @@ export const api = {
     },
 
     uploadVoice: async (file: File) => {
-        if (isElectron()) {
-            return { success: false, error: "Not supported in Electron yet" };
-        }
-
         const formData = new FormData();
         formData.append('voice', file);
 
         const baseUrl = getBaseUrl();
-        // Fallback if baseUrl is null (Electron case handled above, but just in case)
         if (!baseUrl) return { success: false, error: "No API URL" };
 
         const response = await fetch(`${baseUrl}/upload-voice`, {
