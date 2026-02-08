@@ -91,7 +91,8 @@ const AttendanceReports = () => {
 
         setSendingEmail(true);
         try {
-            const response = await fetch('http://localhost:3001/api/send-monthly-attendance', {
+            const baseUrl = api.getCurrentBaseUrl();
+            const response = await fetch(`${baseUrl}/send-monthly-attendance`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -315,49 +316,71 @@ const AttendanceReports = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {attendanceData.slice(0, 20).map((record, index) => (
-                                                <tr key={record.id} style={{
-                                                    borderBottom: '1px solid var(--border-color)',
-                                                    background: index % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)'
-                                                }}>
-                                                    <td style={{ padding: '12px' }}>{record.name}</td>
-                                                    <td style={{ padding: '12px' }}>
-                                                        {new Date(record.timestamp).toLocaleDateString('en-GB')}
-                                                    </td>
-                                                    <td style={{ padding: '12px' }}>
-                                                        {record.type === 'check-in'
-                                                            ? new Date(record.timestamp).toLocaleTimeString('en-US', {
-                                                                hour: '2-digit',
-                                                                minute: '2-digit',
-                                                                hour12: false
-                                                            })
-                                                            : '--'
-                                                        }
-                                                    </td>
-                                                    <td style={{ padding: '12px' }}>
-                                                        {record.type === 'check-out'
-                                                            ? new Date(record.timestamp).toLocaleTimeString('en-US', {
-                                                                hour: '2-digit',
-                                                                minute: '2-digit',
-                                                                hour12: false
-                                                            })
-                                                            : '--'
-                                                        }
-                                                    </td>
-                                                    <td style={{ padding: '12px' }}>
-                                                        <span style={{
-                                                            padding: '4px 12px',
-                                                            borderRadius: '12px',
-                                                            background: record.type === 'check-in' ? '#10b981' : '#f59e0b',
-                                                            color: 'white',
-                                                            fontSize: '12px',
-                                                            fontWeight: '600'
-                                                        }}>
-                                                            {record.type === 'check-in' ? 'Present' : 'Check-out'}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {(() => {
+                                                // Group records by employee and date
+                                                const grouped: any = {};
+                                                attendanceData.forEach((record) => {
+                                                    const date = new Date(record.timestamp).toLocaleDateString('en-GB');
+                                                    const key = `${record.employee_id}_${date}`;
+
+                                                    if (!grouped[key]) {
+                                                        grouped[key] = {
+                                                            name: record.name,
+                                                            date: date,
+                                                            checkIn: null,
+                                                            checkOut: null
+                                                        };
+                                                    }
+
+                                                    if (record.type === 'check-in') {
+                                                        grouped[key].checkIn = record.timestamp;
+                                                    } else if (record.type === 'check-out') {
+                                                        grouped[key].checkOut = record.timestamp;
+                                                    }
+                                                });
+
+                                                return Object.values(grouped).slice(0, 20).map((row: any, index) => (
+                                                    <tr key={index} style={{
+                                                        borderBottom: '1px solid var(--border-color)',
+                                                        background: index % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)'
+                                                    }}>
+                                                        <td style={{ padding: '12px' }}>{row.name}</td>
+                                                        <td style={{ padding: '12px' }}>{row.date}</td>
+                                                        <td style={{ padding: '12px' }}>
+                                                            {row.checkIn
+                                                                ? new Date(row.checkIn).toLocaleTimeString('en-US', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit',
+                                                                    hour12: true
+                                                                })
+                                                                : '--'
+                                                            }
+                                                        </td>
+                                                        <td style={{ padding: '12px' }}>
+                                                            {row.checkOut
+                                                                ? new Date(row.checkOut).toLocaleTimeString('en-US', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit',
+                                                                    hour12: true
+                                                                })
+                                                                : '--'
+                                                            }
+                                                        </td>
+                                                        <td style={{ padding: '12px' }}>
+                                                            <span style={{
+                                                                padding: '4px 12px',
+                                                                borderRadius: '12px',
+                                                                background: row.checkOut ? '#f59e0b' : '#10b981',
+                                                                color: 'white',
+                                                                fontSize: '12px',
+                                                                fontWeight: '600'
+                                                            }}>
+                                                                {row.checkOut ? 'Check-out' : 'Present'}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ));
+                                            })()}
                                         </tbody>
                                     </table>
                                     {attendanceData.length > 20 && (
