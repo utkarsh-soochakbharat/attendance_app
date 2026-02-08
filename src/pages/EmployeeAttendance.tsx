@@ -268,7 +268,7 @@ const EmployeeAttendance = () => {
         try {
             const MODEL_URL = getModelUrl();
             console.log('Loading models from:', MODEL_URL);
-            
+
             // Wait for server to be ready if using HTTP (packaged Electron)
             if (MODEL_URL.startsWith('http://')) {
                 console.log('Waiting for backend server to be ready...');
@@ -279,7 +279,7 @@ const EmployeeAttendance = () => {
                     console.log('Backend server is ready');
                 }
             }
-            
+
             await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
             await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
             await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
@@ -468,7 +468,7 @@ const EmployeeAttendance = () => {
 
     const playVoiceFeedback = (type: 'late' | 'on_time' | 'check_out', settings: any) => {
         const defaultMessages = {
-            late: "You late piece of shii!",
+            late: "You are late!",
             on_time: "On time! Great job.",
             check_out: "Bye bye! See you tomorrow."
         };
@@ -613,9 +613,9 @@ const EmployeeAttendance = () => {
     const formatTime = (datetime: string | null) => {
         if (!datetime) return '-';
         try {
-            // Force treat backend value as UTC and let browser convert to local
-            const iso = datetime.endsWith('Z') ? datetime : `${datetime}Z`;
-            const date = new Date(iso);
+            // Database now stores IST time directly (after our fix)
+            // Don't add 'Z' - treat as local time
+            const date = new Date(datetime);
 
             if (isNaN(date.getTime())) {
                 console.warn('Invalid date:', datetime);

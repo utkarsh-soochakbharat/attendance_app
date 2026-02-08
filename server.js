@@ -409,7 +409,7 @@ app.post('/api/add-visitor', (req, res) => {
 
         const stmt = db.prepare(`
             INSERT INTO visitors (name, email, phone, purpose, host_employee, photo, check_in_time)
-            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
         `);
         const info = stmt.run(name, email, phone, purpose, host_employee, photo);
 
@@ -424,7 +424,7 @@ app.put('/api/checkout-visitor/:id', (req, res) => {
     try {
         const stmt = db.prepare(`
             UPDATE visitors 
-            SET status = 'checked_out', check_out_time = datetime('now') 
+            SET status = 'checked_out', check_out_time = datetime('now', 'localtime') 
             WHERE id = ?
         `);
         stmt.run(req.params.id);
@@ -515,7 +515,7 @@ app.post('/api/check-in-employee', (req, res) => {
 
         const stmt = db.prepare(`
             INSERT INTO attendance (employee_id, type, office_location_id, timestamp)
-            VALUES (?, 'check-in', ?, datetime('now'))
+            VALUES (?, 'check-in', ?, datetime('now', 'localtime'))
         `);
         stmt.run(employee.id, employee.office_id);
         res.json({ success: true });
@@ -536,7 +536,7 @@ app.post('/api/check-out-employee', (req, res) => {
 
         const stmt = db.prepare(`
             INSERT INTO attendance (employee_id, type, office_location_id, timestamp)
-            VALUES (?, 'check-out', ?, datetime('now'))
+            VALUES (?, 'check-out', ?, datetime('now', 'localtime'))
         `);
         stmt.run(employee.id, employee.office_id);
         res.json({ success: true });
