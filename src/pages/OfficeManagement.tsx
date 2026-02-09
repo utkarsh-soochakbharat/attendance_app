@@ -17,7 +17,7 @@ const OfficeManagement = () => {
         start_time: '09:00',
         end_time: '18:00',
         voice_settings: {
-            late: { message: "u late piece of shii", audio: '' },
+            late: { message: "You are late!", audio: '' },
             on_time: { message: "On time!", audio: '' },
             check_out: { message: "Bye bye", audio: '' }
         }
@@ -113,7 +113,7 @@ const OfficeManagement = () => {
         setFormData({
             name: '', latitude: '', longitude: '', radius: '300', start_time: '09:00', end_time: '18:00',
             voice_settings: {
-                late: { message: "u late piece of shii", audio: '' },
+                late: { message: "You are late!", audio: '' },
                 on_time: { message: "On time!", audio: '' },
                 check_out: { message: "Bye bye", audio: '' }
             }
@@ -131,7 +131,7 @@ const OfficeManagement = () => {
             start_time: office.start_time || '09:00',
             end_time: office.end_time || '18:00',
             voice_settings: office.voice_settings || {
-                late: { message: "u late piece of shii", audio: '' },
+                late: { message: "You are late!", audio: '' },
                 on_time: { message: "On time!", audio: '' },
                 check_out: { message: "Bye bye", audio: '' }
             }
@@ -213,7 +213,7 @@ const OfficeManagement = () => {
                         start_time: '09:00', 
                         end_time: '18:00',
                         voice_settings: {
-                            late: { message: "u late piece of shii", audio: '' },
+                            late: { message: "You are late!", audio: '' },
                             on_time: { message: "On time!", audio: '' },
                             check_out: { message: "Bye bye", audio: '' }
                         }
@@ -501,7 +501,7 @@ const OfficeManagement = () => {
                                     <input
                                         className="form-input"
                                         type="text"
-                                        placeholder="Message (e.g. u late piece of shii)"
+                                        placeholder="Message (e.g. You are late!)"
                                         value={formData.voice_settings?.late?.message || ''}
                                         onChange={(e) => setFormData(prev => ({
                                             ...prev,
@@ -581,7 +581,7 @@ const OfficeManagement = () => {
                                         setFormData({
                                             name: '', latitude: '', longitude: '', radius: '300', start_time: '09:00', end_time: '18:00',
                                             voice_settings: {
-                                                late: { message: "u late piece of shii", audio: '' },
+                                                late: { message: "You are late!", audio: '' },
                                                 on_time: { message: "On time!", audio: '' },
                                                 check_out: { message: "Bye bye", audio: '' }
                                             }
